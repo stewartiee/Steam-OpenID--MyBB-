@@ -61,10 +61,12 @@ class SteamLogin {
         
         if($this->SteamOpenID->validate() == 0)
         {
+        	define("API_KEY", ); // Your Steam API key.
+        	
             $ReturnExplode = explode('/', $this->SteamOpenID->identity);
             $SteamID = end($ReturnExplode);
             
-            $SteamUser = file_get_contents('http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=2C8BD79BCC793EDF42A1904ABB907F59&steamids='.$SteamID);
+            $SteamUser = file_get_contents('http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key='.API_KEY.'&steamids='.$SteamID);
             $SteamUser = json_decode($SteamUser, true);
             
             echo "Hello, ".$SteamUser['response']['players'][0]['personaname'];
