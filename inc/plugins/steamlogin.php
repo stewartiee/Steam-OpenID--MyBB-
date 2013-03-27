@@ -106,9 +106,8 @@ function steam_output_to_misc() {
 
 		    require_once MYBB_ROOT.'inc/class_lightopenid.php';
 
-			$SteamOpenID = new LightOpenID();
-			$SteamOpenID->returnUrl = $mybb->settings['bburl'].'/misc.php?action=steam_return';
-		    $SteamOpenID->__set('realm', $mybb->settings['bburl'].'/misc.php?action=steam_return');
+	        $return_url = $mybb->settings['bburl'].'/misc.php?action=steam_return';
+			$SteamOpenID = new LightOpenID($return_url);
 
 		    $SteamOpenID->identity = 'http://steamcommunity.com/openid';
 
@@ -134,9 +133,13 @@ function steam_output_to_misc() {
 	    	require_once MYBB_ROOT.'inc/class_session.php';
 
 	    	$steam = new steam;
-	     
-	     	$steam_open_id = new LightOpenID();   
-	        $steam_open_id->validate();
+	        $return_url = $mybb->settings['bburl'].'/misc.php?action=steam_return';
+	     	$steam_open_id = new LightOpenID($return_url);
+	        $is_valid = $steam_open_id->validate();
+	        if (!$is_valid) {
+                redirect("index.php", "Authentication failed",
+                    "Login via Steam");
+	            }
 
 	        $return_explode = explode('/', $steam_open_id->identity);
 	        $steamid = end($return_explode);
@@ -203,7 +206,7 @@ function steam_output_to_misc() {
 				my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], $remember, true);
 				my_setcookie("sid", $session->sid, -1, true);
 
-				redirect("index.php", 'Your account has been autheticated and you have been logged in.', 'Login via Steam');
+				redirect("index.php", 'Your account has been authenticated and you have been logged in.', 'Login via Steam');
 			}
 
 		}

@@ -35,8 +35,15 @@ class LightOpenID
 
     function __construct()
     {
-    	$host = 'http://steamcommunity.com/openid';
-    	
+        $args = func_get_args();
+        if ($args) {
+            $this->returnUrl = $args[0];
+            $frags = parse_url($args[0]);
+            $host = $frags['host'];
+        } else {
+            $host = $_SERVER['HTTP_HOST'];
+        }
+
         $this->trustRoot = (strpos($host, '://') ? $host : 'http://' . $host);
         if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off')
             || (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
@@ -49,13 +56,19 @@ class LightOpenID
             $this->trustRoot = substr($this->trustRoot, 0, $host_end);
         }
 
-        $uri = rtrim(preg_replace('#((?<=\?)|&)openid\.[^&]+#', '', $_SERVER['REQUEST_URI']), '?');
-        $this->returnUrl = $this->trustRoot . $uri;
-
+        if (!$args) {
+            $uri = rtrim(preg_replace('#((?<=\?)|&)openid\.[^&]+#', 
+                '', $_SERVER['REQUEST_URI']), '?');        
+            
+            # almost guaranteed not to work, unless login and return pages
+            # are the same
+            $this->returnUrl = $this->trustRoot . $uri;
+        }
         $this->data = ($_SERVER['REQUEST_METHOD'] === 'POST') ? $_POST : $_GET;
 
         if(!function_exists('curl_init') && !in_array('https', stream_get_wrappers())) {
             throw new ErrorException('You must have either https wrappers or curl enabled.');
+
         }
     }
 
@@ -679,7 +692,6 @@ class LightOpenID
             $this->returnUrl .= (strpos($this->returnUrl, '?') ? '&' : '?')
                              .  'openid.claimed_id=' . $this->claimed_id;
         }
-
         if ($this->data['openid_return_to'] != $this->returnUrl) {
             # The return_to url must match the url of current request.
             # I'm assuing that noone will set the returnUrl to something that doesn't make sense.
