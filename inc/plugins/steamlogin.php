@@ -11,6 +11,10 @@ if(!defined("IN_MYBB")) die("Direct initialization of this file is not allowed.<
 
 // Add to our hooks.
 $plugins->add_hook("misc_start", "steam_output_to_misc");
+$plugins->add_hook("member_login", "steam_redirect");
+$plugins->add_hook("member_register_start", "steam_redirect");
+$plugins->add_hook("newreply_start", "steam_redirect");
+$plugins->add_hook("newthread_start", "steam_redirect");
 
 // Information about the plugin.
 function steamlogin_info()
@@ -74,7 +78,7 @@ function steamlogin_activate()
 	find_replace_templatesets(
 		"header_welcomeblock_guest",
 		'#'.preg_quote('{$lang->welcome_guest}').'#',
-		'{$lang->welcome_guest}'.$steamlogin_button
+		'{$lang->welcome_guest} '.$steamlogin_button
 	);		
 
 
@@ -88,21 +92,20 @@ function steamlogin_deactivate()
     $db->delete_query("settinggroups","name = 'steamlogin'");
 }
 
-// The outputs the actions used by the plugin for login and return.
-function steam_output_to_misc() {
 
-    global $mybb, $db;
-        
-    if($mybb->input['action'] == 'steam_login')
-    {
 
-    	$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
+function steam_redirect() {
 
-    	if($get_key['value'] == null) {
+	global $mybb, $db;
 
-    		echo "The Steam Login plugin hasn't been configured correctly.";
+	if($mybb->user['uid'] == 0) {
+		$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
 
-    	} else {
+		if($get_key['value'] == null) {
+
+			echo "The Steam Login plugin hasn't been configured correctly.";
+
+		} else {
 
 		    require_once MYBB_ROOT.'inc/class_lightopenid.php';
 
@@ -115,6 +118,21 @@ function steam_output_to_misc() {
 		    redirect($SteamOpenID->authUrl(), 'You are being redirect to Steam to authenticate your account for use on our website.', 'Login via Steam');
 
 		}
+	}
+
+}
+
+
+// The outputs the actions used by the plugin for login and return.
+function steam_output_to_misc() {
+
+    global $mybb, $db;
+        
+    if($mybb->input['action'] == 'steam_login')
+    {
+
+steam_redirect();
+
     }
 
     if($mybb->input['action'] == 'steam_return')
@@ -184,9 +202,19 @@ function steam_output_to_misc() {
 			        	'avatar' => $avatar, 
 			        	'usergroup' => 2,
 			        	'regdate' => time(),
+			        	'allownotices' => 1,
+			        	'receivepms' => 1,
+			        	'pmnotice' => 1,
+			        	'pmnotify' => 1,
+			        	'showsigs' => 1,
+			        	'showavatars' => 1,
+			        	'showquickreply' => 1,
+			        	'showredirect' => 1,
+			        	'timezone' => 0,
 			        	'website' => $profileurl,
 			        	'steam_id' => $steamid,
-			        	'loginname' => $steamid
+			        	'loginname' => $steamid,
+			        	'signature' => ''
 			    	);
 
 			        $db->insert_query('users', $insert);
