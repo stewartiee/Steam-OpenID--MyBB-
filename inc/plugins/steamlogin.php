@@ -13,10 +13,10 @@ if(!defined("IN_MYBB")) die("Direct initialization of this file is not allowed.<
 $plugins->add_hook("misc_start", "steam_output_to_misc");
 $plugins->add_hook("member_login", "steam_redirect");
 $plugins->add_hook("member_register_start", "steam_redirect");
-$plugins->add_hook("newreply_start", "steam_redirect");
-$plugins->add_hook("newthread_start", "steam_redirect");
+$plugins->add_hook("no_permission", "steam_redirect", "newreply.php");
+$plugins->add_hook("no_permission", "steam_redirect", "newthread.php");
 
-// Information about the plugin.
+// Information about the Steam Login plugin.
 function steamlogin_info()
 {
 	return array(
@@ -25,24 +25,17 @@ function steamlogin_info()
 		"website"		=> "http://www.calculator.tf",
 		"author"		=> "Ryan Stewart",
 		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.0",
+		"version"		=> "1.2",
 		"guid" 			=> "",
 		"compatibility" => "*"
 	);
 }
 
+
 // The queries to be run when the plugin is activated.
 function steamlogin_activate()
 {
 	global $db, $mybb, $templates;
-
-	if(!$db->field_exists('steam_id', 'users')) {
-
-		// Create a column for the Steam 64bit ID.
-		$db->query("ALTER TABLE ".TABLE_PREFIX."users ADD steam_id VARCHAR(17) NOT NULL DEFAULT 0");
-		$db->query("ALTER TABLE ".TABLE_PREFIX."users ADD steam_persona VARCHAR(250) NOT NULL DEFAULT 0");
-
-	} // close if(!$db->field_exists('steam_id', 'users'))
 
     // create a setting group to house our setting
     $steamlogin_settings = array(
@@ -72,68 +65,82 @@ function steamlogin_activate()
     $db->insert_query("settings", $steamlogin_api_key_setting);
     rebuildsettings();
 
-    $steamlogin_button = '<a href="'.$mybb->settings['bburl'].'/misc.php?action=steam_login"><img border="0" src="'.$mybb->settings['bburl'].'/inc/plugins/steamlogin/img/steam_login_btn.png" alt="Login through Steam" /></a>';
-   
-	require MYBB_ROOT.'/inc/adminfunctions_templates.php';
-	find_replace_templatesets(
-		"header_welcomeblock_guest",
-		'#'.preg_quote('{$lang->welcome_guest}').'#',
-		'{$lang->welcome_guest} '.$steamlogin_button
-	);		
+	require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
+	find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('{$lang->welcome_register}</a>') . '#i', '{$lang->welcome_register}</a> &mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>');
+	find_replace_templatesets('footer', '#' . preg_quote('<!-- End powered by -->') . '#i', 'Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.<!-- End powered by -->');
 
 } // close function steamlogin_activate
 
+
+// Code to run when the plugin is deactivated.
 function steamlogin_deactivate()
 {
+
 	global $db;
 
     $db->delete_query("settings","name LIKE 'steamlogin_%'");
     $db->delete_query("settinggroups","name = 'steamlogin'");
-}
+
+	require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+
+    find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('&mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>') . '#i', '');
+    find_replace_templatesets('footer', '#' . preg_quote('Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.') . '#i', '');
+
+} // close function steamlogin_deactivate
 
 
 
-function steam_redirect() {
+// The standard redirect function for redirecting the browser to Steam community.
+function steam_redirect() 
+{
 
 	global $mybb, $db;
 
+	// Check if the user is logged in or not.
 	if($mybb->user['uid'] == 0) {
+
+		// Get the Steam API key set in settings.
 		$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
 
 		if($get_key['value'] == null) {
 
+			// The Steam API key hasn't been set, so stop the script and output error message.
 			echo "The Steam Login plugin hasn't been configured correctly.";
 
-		} else {
+		} else { // close if($get_key['value'] == null)
 
+			//Set options for the OpenID library.
 		    require_once MYBB_ROOT.'inc/class_lightopenid.php';
 
-	        $return_url = $mybb->settings['bburl'].'/misc.php?action=steam_return';
-			$SteamOpenID = new LightOpenID($return_url);
+			$SteamOpenID = new LightOpenID();
+			$SteamOpenID->returnUrl = $mybb->settings['bburl'].'/misc.php?action=steam_return';
+		    $SteamOpenID->__set('realm', $mybb->settings['bburl'].'/misc.php?action=steam_return');
 
 		    $SteamOpenID->identity = 'http://steamcommunity.com/openid';
 
 		    // Redirect directly to Steam.
 		    redirect($SteamOpenID->authUrl(), 'You are being redirect to Steam to authenticate your account for use on our website.', 'Login via Steam');
 
-		}
-	}
+		} // close else
 
-}
+	} // close if($mybb->user['uid'] == 0)
+
+} // close function steam_redirect
 
 
 // The outputs the actions used by the plugin for login and return.
 function steam_output_to_misc() {
 
-    global $mybb, $db;
+    global $mybb, $db, $session;
         
+    // The standard action to redirect the user to Steam community.
     if($mybb->input['action'] == 'steam_login')
     {
 
-steam_redirect();
+		steam_redirect();
 
-    }
+    } // close if($mybb->input['action'] == 'steam_login')
 
     if($mybb->input['action'] == 'steam_return')
     {
@@ -151,13 +158,9 @@ steam_redirect();
 	    	require_once MYBB_ROOT.'inc/class_session.php';
 
 	    	$steam = new steam;
-	        $return_url = $mybb->settings['bburl'].'/misc.php?action=steam_return';
-	     	$steam_open_id = new LightOpenID($return_url);
-	        $is_valid = $steam_open_id->validate();
-	        if (!$is_valid) {
-                redirect("index.php", "Authentication failed",
-                    "Login via Steam");
-	            }
+	     
+	     	$steam_open_id = new LightOpenID();   
+	        $steam_open_id->validate();
 
 	        $return_explode = explode('/', $steam_open_id->identity);
 	        $steamid = end($return_explode);
@@ -167,6 +170,7 @@ steam_redirect();
 	        // Check the status.
 	        if($steam_info['status'] == 'success')
 	        {
+
 	        	$steamid = $steam_info['steamid'];
 	        	$personaname = $steam_info['personaname'];
 	        	$profileurl = $steam_info['profileurl'];
@@ -174,51 +178,42 @@ steam_redirect();
 
 	        	$personaname = $db->escape_string($personaname);
 
-
 		        // Perform a check to see if the user already exists in the database.
 		        $user_check = $db->num_rows($db->simple_select("users", "*", "loginname = '$steamid'"));
 
 		        if($user_check == 0) 
 		        {
 
-		        	// User doesn't exist, so create a new record for them.
-					$md5password = md5($steamid.rand(124748237487, 324748237487));
+		        	$password = random_str(8);
+		        	$email = $steamid.'@steamcommunity.com';
+		        	$default_usergroup = 2; // On a standard MyBB installation this is the group: Registered
 
-					// Generate our salt
-					$salt = random_str(8);
+					require_once MYBB_ROOT . "inc/datahandlers/user.php";
+					$userhandler = new UserDataHandler("insert");
 
-					// Combine the password and salt
-					$saltedpw = md5(md5($salt).$md5password);
+					$new_user_data = array(
+						"username" => $personaname,
+						"password" => $password,
+						"password2" => $password,
+						"email" => $email,
+						"email2" => $email,
+						"avatar" => $avatar,
+						"usergroup" => $default_usergroup,
+						"displaygroup" => $default_usergroup,
+						"website" => $profileurl,
+						"regip" => $session->ipaddress,
+						"longregip" => my_ip2long($session->ipaddress),
+						"loginname" => $steamid
+					);
 
-					// Generate the user login key
-					$loginkey = random_str(50);
+					$userhandler->set_data($new_user_data);
 
-			        $insert = array(
-			        	'username' => $personaname, 
-			        	'password' => $saltedpw,
-			        	'salt' => $salt,
-			        	'loginkey' => $loginkey,
-			        	'email' => '',
-			        	'avatar' => $avatar, 
-			        	'usergroup' => 2,
-			        	'regdate' => time(),
-			        	'allownotices' => 1,
-			        	'receivepms' => 1,
-			        	'pmnotice' => 1,
-			        	'pmnotify' => 1,
-			        	'showsigs' => 1,
-			        	'showavatars' => 1,
-			        	'showquickreply' => 1,
-			        	'showredirect' => 1,
-			        	'timezone' => 0,
-			        	'website' => $profileurl,
-			        	'steam_id' => $steamid,
-			        	'loginname' => $steamid,
-			        	'signature' => ''
-			    	);
+					if ($userhandler->validate_user()) {
 
-			        $db->insert_query('users', $insert);
-			        update_stats(array('numusers' => '+1','lastusername' => $personaname));
+						$user_info = $userhandler->insert_user();
+
+					} // close if ($userhandler->validate_user())
+
 
 			    } else { // close if($user_check == 0)
 
@@ -228,16 +223,17 @@ steam_redirect();
 
 			    } // close else
 
-			    $user = $db->fetch_array($db->simple_select("users", "*", "steam_id = '$steamid'"));
+			    $user = $db->fetch_array($db->simple_select("users", "*", "loginname = '$steamid'"));
 
 			    // Login the user.
 				my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], $remember, true);
 				my_setcookie("sid", $session->sid, -1, true);
 
-				redirect("index.php", 'Your account has been authenticated and you have been logged in.', 'Login via Steam');
-			}
+				redirect("index.php", 'Your account has been autheticated and you have been logged in.', 'Login via Steam');
 
-		}
+			} // close if($steam_info['status'] == 'success')
+
+		} // close else
 
 	} // close if($mybb->input['action'] == 'steam_login')
 
