@@ -229,7 +229,7 @@ function steam_output_to_misc() {
 				my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], $remember, true);
 				my_setcookie("sid", $session->sid, -1, true);
 
-				redirect("index.php", 'Your account has been autheticated and you have been logged in.', 'Login via Steam');
+				redirect("index.php", 'Your account has been authenticated and you have been logged in.', 'Login via Steam');
 
 			} // close if($steam_info['status'] == 'success')
 
