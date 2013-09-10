@@ -16,40 +16,57 @@ $plugins->add_hook("member_register_start", "steam_redirect");
 $plugins->add_hook("no_permission", "steam_redirect", "newreply.php");
 $plugins->add_hook("no_permission", "steam_redirect", "newthread.php");
 
-// Information about the Steam Login plugin.
+
+/**
+ *
+ * Plugin Info - steamlogin_info
+ * - - - - - - - - - - - - - - -
+ * @desc The information to show in the MyBB Administration Dashboard.
+ * @since 1.0
+ * @version 1.3
+ *
+ */
 function steamlogin_info()
 {
+
 	return array(
 		"name"			=> "Steam Login",
-		"description"	=> "Allows the registration of accounts through Steam.",
+		"description"	=> "Allows the registration of accounts through Steam. (For support/issues please visit https://github.com/stewartiee/Steam-OpenID--MyBB-)",
 		"website"		=> "http://www.calculator.tf",
 		"author"		=> "Ryan Stewart",
 		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.2",
+		"version"		=> "1.3",
 		"guid" 			=> "",
 		"compatibility" => "*"
 	);
-}
+
+} // close function steamlogin_info
 
 
-// The queries to be run when the plugin is activated.
+/**
+ *
+ * Plugin Activate - steamlogin_activate
+ * - - - - - - - - - - - - - - -
+ * @since 1.0
+ * @version 1.3
+ *
+ */
 function steamlogin_activate()
 {
 	global $db, $mybb, $templates;
 
-    // create a setting group to house our setting
     $steamlogin_settings = array(
-        "name"            => "steamlogin",
-        "title"         => "Steam Login - Settings",
-        "description"    => "Modify the settings of the Steam Login plugin.",
-        "disporder"        => "0",
-        "isdefault"        => "no",
+        "name" => "steamlogin",
+        "title" => "Steam Login - Settings",
+        "description" => "Modify the settings of the Steam Login plugin.",
+        "disporder" => "0",
+        "isdefault" => "no",
     );
     
-    // insert the setting group into the database
+    // Create our Setting group in the database.
     $db->insert_query("settinggroups", $steamlogin_settings);
     
-    // grab insert ID of the setting group
+    // Our new Setting group ID.
     $gid = intval($db->insert_id());
     
     $steamlogin_api_key_setting = array(
@@ -61,28 +78,75 @@ function steamlogin_activate()
         "disporder" => 1,
         "gid" => $gid
     );
-    
+
+    $steamlogin_update_username_setting = array(
+        "name" => "steamlogin_update_username",
+        "title" => "Update Username",
+        "description" => "Should the plugin be allowed to update the username of the user on each login? (If a user changes their name on Steam, this will update here too.)",
+        "optionscode" => "yesno",
+        "value" => "no",
+        "disporder" => 2,
+        "gid" => $gid
+    );
+
+    $steamlogin_update_avatar_setting = array(
+        "name" => "steamlogin_update_avatar",
+        "title" => "Update Avatar",
+        "description" => "Should the plugin be allowed to update the avatar of the user to that of their Steam account?",
+        "optionscode" => "yesno",
+        "value" => "yes",
+        "disporder" => 3,
+        "gid" => $gid
+    );
+
+    // Insert our Settings.
     $db->insert_query("settings", $steamlogin_api_key_setting);
+    $db->insert_query("settings", $steamlogin_update_username_setting);
+    $db->insert_query("settings", $steamlogin_update_avatar_setting);
+
+    // Rebuild our settings to show our new category.
     rebuildsettings();
 
-	require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
+    /**
+     * Template Edits
+     * - - - - - - - - - - - - - - -
+     * Template edits required by the plugin.
+     */
+    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+
+    // Add a Login button to the "Welcome Block"/
 	find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('{$lang->welcome_register}</a>') . '#i', '{$lang->welcome_register}</a> &mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>');
-	find_replace_templatesets('footer', '#' . preg_quote('<!-- End powered by -->') . '#i', 'Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.<!-- End powered by -->');
+
+    // This is released as Open Source. Although this notice isn't required to be kept, i'd appreciate if you could show your support by keeping it here.
+    find_replace_templatesets('footer', '#' . preg_quote('<!-- End powered by -->') . '#i', 'Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.<!-- End powered by -->');
 
 } // close function steamlogin_activate
 
 
-// Code to run when the plugin is deactivated.
+/**
+ *
+ * Plugin Deactivate - steamlogin_deactivate
+ * - - - - - - - - - - - - - - -
+ * @since 1.0
+ * @version 1.2
+ *
+ */
 function steamlogin_deactivate()
 {
 
 	global $db;
 
+    // Delete our Setting groups.
     $db->delete_query("settings","name LIKE 'steamlogin_%'");
     $db->delete_query("settinggroups","name = 'steamlogin'");
 
-	require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    /**
+     * Template Edits
+     * - - - - - - - - - - - - - - -
+     * Revert any template edits made during install.
+     */
+    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
     find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('&mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>') . '#i', '');
     find_replace_templatesets('footer', '#' . preg_quote('Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.') . '#i', '');
@@ -91,8 +155,16 @@ function steamlogin_deactivate()
 
 
 
-// The standard redirect function for redirecting the browser to Steam community.
-function steam_redirect() 
+/**
+ *
+ * Steam Redirect - steam_redirect
+ * - - - - - - - - - - - - - - -
+ * @desc Redirects the browser to Steam OpenID website for login.
+ * @since 1.0
+ * @version 1.0
+ *
+ */
+function steam_redirect()
 {
 
 	global $mybb, $db;
@@ -129,7 +201,15 @@ function steam_redirect()
 } // close function steam_redirect
 
 
-// The outputs the actions used by the plugin for login and return.
+/**
+ *
+ * Redirect Output - steam_output_to_misc
+ * - - - - - - - - - - - - - - -
+ * @desc This function is holds the actions issued by the Steam Login plugin.
+ * @since 1.0
+ * @version 1.3
+ *
+ */
 function steam_output_to_misc() {
 
     global $mybb, $db, $session;
@@ -142,9 +222,12 @@ function steam_output_to_misc() {
 
     } // close if($mybb->input['action'] == 'steam_login')
 
+
     if($mybb->input['action'] == 'steam_return')
     {
     	$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
+        $check_update_username = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_username'"));
+        $check_update_avatar = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_avatar'"));
 
     	if($get_key['value'] == null) {
 
@@ -217,9 +300,14 @@ function steam_output_to_misc() {
 
 			    } else { // close if($user_check == 0)
 
-		    		// Keep the persona of the user up to date.
-			    	$update = array('username' => $personaname, 'avatar' => $avatar);
-		    		$db->update_query('users', $update, "loginname = '$steamid'");
+                    $update = array(); // Init our update array.
+
+                    // Do our checks for both username and avatar.
+                    if($check_update_username['value'] == 1) $update['username'] = $personaname;
+                    if($check_update_avatar['value'] == 1) $update['avatar'] = $avatar;
+
+                    // Run our update query if the array isn't empty.
+                    if(!empty($update)) $db->update_query('users', $update, "loginname = '$steamid'");
 
 			    } // close else
 
