@@ -258,9 +258,11 @@ function steam_output_to_misc() {
 	        	$personaname = $steam_info['personaname'];
 	        	$profileurl = $steam_info['profileurl'];
 	        	$avatar = $steam_info['avatar'];
-
+	        	
+			$personaname = strip_tags($personaname);//This is so people can not use tags that display.
 	        	$personaname = $db->escape_string($personaname);
-
+			
+			
 		        // Perform a check to see if the user already exists in the database.
 		        $user_check = $db->num_rows($db->simple_select("users", "*", "loginname = '$steamid'"));
 
