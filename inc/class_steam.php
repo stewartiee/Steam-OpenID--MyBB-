@@ -42,7 +42,13 @@ class steam {
                 return $file;
 
             } else {
-                die("cURL and Fopen are both disabled. Please enable one or the other. cURL is prefered.");
+            	if(!function_exists('fopen') && ini_get('allow_url_fopen')){
+                	die("cURL and Fopen are both disabled. Please enable one or the other. cURL is prefered.");
+            	} elseif(function_exists('fopen') && !ini_get('allow_url_fopen')){
+            		die("cURL is disabled and Fopen is enabled but 'allow_url_fopen' is disabled(means you can not open external urls). Please enabled one or the other.");
+            	} else {
+            		die("cURL and Fopen are both disabled. Please enable one or the other. cURL is prefered.");
+            	}
             }
 
         } // close else
