@@ -6,6 +6,6 @@ To install copy all files to your server and enable both the 'Display Usernames'
 You will need a Steam API key to use the 'Steam Login' plugin. You can configure your key in the Settings menu in administration panel.
 
 
-<h3>To get an api key you may get one at http://steamcommunity.com/dev</h3>
+<p>To get an api key you may get one at http://steamcommunity.com/dev</p>
 -------------------------------
 The included plugin, dispname.php, was created and owned by ZiNgA BuRgA (http://mybbhacks.zingaburga.com/showthread.php?tid=259).
