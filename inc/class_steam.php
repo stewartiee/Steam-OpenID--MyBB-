@@ -39,6 +39,7 @@ class steam {
                   ));
                 $handle = @fopen($url, 'r', false, $context);
                 $file = @stream_get_contents($handle);
+                @fclose($handle);
                 return $file;
 
             } else {
