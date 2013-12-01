@@ -79,7 +79,9 @@ class steam {
 
                 $personaname = $player_info['personaname'];
                 $profileurl = $player_info['profileurl'];
-                $avatar = $player_info['avatarfull'];
+                $avatar_s = $player_info['avatar'];
+                $avatar_m = $player_info['avatarmedium'];
+                $avatar_l = $player_info['avatarfull'];
                 $personastate = $player_info['personastate'];
 
                 $return_array = array(
@@ -87,7 +89,11 @@ class steam {
                     'steamid' => $id['steamid'],
                     'personaname' => $personaname,
                     'profileurl' => $profileurl,
-                    'avatar' => $avatar,
+                    'avatars' => array(
+                        'small' => $avatar_s,
+                        'medium' => $avatar_m,
+                        'large' => $avatar_l
+                    ),
                     'personastate' => $personastate
                 );
 
@@ -95,7 +101,7 @@ class steam {
 
                 $return_array = array(
                     'status' => 'error',
-                    'message' => 'An error occured retrieving user information from the Steam service.'
+                    'message' => 'An error occurred retrieving user information from the Steam service.'
                 );
 
             } // close else
