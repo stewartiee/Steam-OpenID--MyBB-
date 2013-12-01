@@ -99,10 +99,24 @@ function steamlogin_activate()
         "gid" => $gid
     );
 
+    $steamlogin_avatar_size_setting = array(
+        "name" => "steamlogin_avatar_size",
+        "title" => "Avatar Size",
+        "description" => "Set whether to use the small, medium or large avatar from the Steam API.",
+        "optionscode" => "select
+0=Small
+1=Medium
+2=Large",
+        "value" => "2",
+        "disporder" => 4,
+        "gid" => $gid
+    );
+
     // Insert our Settings.
     $db->insert_query("settings", $steamlogin_api_key_setting);
     $db->insert_query("settings", $steamlogin_update_username_setting);
     $db->insert_query("settings", $steamlogin_update_avatar_setting);
+    $db->insert_query("settings", $steamlogin_avatar_size_setting);
 
     // Rebuild our settings to show our new category.
     rebuildsettings();
