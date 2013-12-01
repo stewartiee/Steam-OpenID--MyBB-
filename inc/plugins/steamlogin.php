@@ -35,7 +35,7 @@ function steamlogin_info()
 		"website"		=> "http://www.calculator.tf",
 		"author"		=> "Ryan Stewart",
 		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.3",
+		"version"		=> "1.4",
 		"guid" 			=> "",
 		"compatibility" => "*"
 	);
@@ -48,7 +48,7 @@ function steamlogin_info()
  * Plugin Activate - steamlogin_activate
  * - - - - - - - - - - - - - - -
  * @since 1.0
- * @version 1.3
+ * @version 1.4
  *
  */
 function steamlogin_activate()
@@ -107,6 +107,10 @@ function steamlogin_activate()
     // Rebuild our settings to show our new category.
     rebuildsettings();
 
+    /**
+     * Perform an update to the username length.
+     */
+    $update_username_length = $db->update_query("settings",array('value' => '70'),"name = 'maxnamelength'");
 
     /**
      * Template Edits
@@ -129,7 +133,7 @@ function steamlogin_activate()
  * Plugin Deactivate - steamlogin_deactivate
  * - - - - - - - - - - - - - - -
  * @since 1.0
- * @version 1.2
+ * @version 1.4
  *
  */
 function steamlogin_deactivate()
@@ -140,6 +144,11 @@ function steamlogin_deactivate()
     // Delete our Setting groups.
     $db->delete_query("settings","name LIKE 'steamlogin_%'");
     $db->delete_query("settinggroups","name = 'steamlogin'");
+
+    /**
+     * Revert username length change.
+     */
+    $update_username_length = $db->update_query("settings",array('value' => '15'),"name = 'maxnamelength'");
 
     /**
      * Template Edits
@@ -207,7 +216,7 @@ function steam_redirect()
  * - - - - - - - - - - - - - - -
  * @desc This function is holds the actions issued by the Steam Login plugin.
  * @since 1.0
- * @version 1.3
+ * @version 1.4
  *
  */
 function steam_output_to_misc() {
@@ -228,6 +237,7 @@ function steam_output_to_misc() {
     	$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
         $check_update_username = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_username'"));
         $check_update_avatar = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_avatar'"));
+        $check_avatar_size = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_avatar_size'"));
 
     	if($get_key['value'] == null) {
 
@@ -257,11 +267,14 @@ function steam_output_to_misc() {
 	        	$steamid = $steam_info['steamid'];
 	        	$personaname = $steam_info['personaname'];
 	        	$profileurl = $steam_info['profileurl'];
-	        	$avatar = $steam_info['avatar'];
+                $avatar = $steam_info['avatars']['medium'];
+
+                // Check the avatar size set in the database.
+                if($check_avatar_size['value'] == '0') $avatar = $steam_info['avatars']['small'];
+                if($check_avatar_size['value'] == '2') $avatar = $steam_info['avatars']['large'];
 	        	
-			$personaname = strip_tags($personaname);//This is so people can not use tags that display.
+			    $personaname = strip_tags($personaname);//This is so people can not use tags that display.
 	        	$personaname = $db->escape_string($personaname);
-			
 			
 		        // Perform a check to see if the user already exists in the database.
 		        $user_check = $db->num_rows($db->simple_select("users", "*", "loginname = '$steamid'"));
