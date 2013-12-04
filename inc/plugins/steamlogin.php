@@ -15,6 +15,7 @@ $plugins->add_hook("member_login", "steam_redirect");
 $plugins->add_hook("member_register_start", "steam_redirect");
 $plugins->add_hook("no_permission", "steam_redirect", "newreply.php");
 $plugins->add_hook("no_permission", "steam_redirect", "newthread.php");
+$plugins->add_hook("member_profile_start", "steamify_user_profile");
 
 
 /**
@@ -23,7 +24,7 @@ $plugins->add_hook("no_permission", "steam_redirect", "newthread.php");
  * - - - - - - - - - - - - - - -
  * @desc The information to show in the MyBB Administration Dashboard.
  * @since 1.0
- * @version 1.3
+ * @version 1.5
  *
  */
 function steamlogin_info()
@@ -35,7 +36,7 @@ function steamlogin_info()
 		"website"		=> "http://www.calculator.tf",
 		"author"		=> "Ryan Stewart",
 		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.4",
+		"version"		=> "1.5",
 		"guid" 			=> "",
 		"compatibility" => "*"
 	);
@@ -48,7 +49,7 @@ function steamlogin_info()
  * Plugin Activate - steamlogin_activate
  * - - - - - - - - - - - - - - -
  * @since 1.0
- * @version 1.4
+ * @version 1.5
  *
  */
 function steamlogin_activate()
@@ -137,6 +138,30 @@ function steamlogin_activate()
 	find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('{$lang->welcome_register}</a>') . '#i', '{$lang->welcome_register}</a> &mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>');
 
     // This is released as Open Source. Although this notice isn't required to be kept, i'd appreciate if you could show your support by keeping it here.
+    find_replace_templatesets('member_profile', '#' . preg_quote('{$signature}') . '#i', '<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder">
+<tr>
+<td colspan="2" class="thead"><strong>Steam Details</strong></td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>Level</strong></td>
+<td class="trow1">{$steam_level}</td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>SteamID 64</strong></td>
+<td class="trow1">{$steamid_64}</td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>SteamID 32</strong></td>
+<td class="trow1">{$steamid_32}</td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>SteamRep</strong></td>
+<td class="trow1">{$steamrep_link}</td>
+</tr>
+</table>
+<br />{$signature}');
+
+    // This is released as Open Source. Although this notice isn't required to be kept, i'd appreciate if you could show your support by keeping it here.
     find_replace_templatesets('footer', '#' . preg_quote('<!-- End powered by -->') . '#i', 'Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.<!-- End powered by -->');
 
 } // close function steamlogin_activate
@@ -147,7 +172,7 @@ function steamlogin_activate()
  * Plugin Deactivate - steamlogin_deactivate
  * - - - - - - - - - - - - - - -
  * @since 1.0
- * @version 1.4
+ * @version 1.5
  *
  */
 function steamlogin_deactivate()
@@ -172,6 +197,28 @@ function steamlogin_deactivate()
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
     find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('&mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>') . '#i', '');
+    find_replace_templatesets('member_profile', '#' . preg_quote('<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder">
+<tr>
+<td colspan="2" class="thead"><strong>Steam Details</strong></td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>Level</strong></td>
+<td class="trow1">{$steam_level}</td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>SteamID 64</strong></td>
+<td class="trow1">{$steamid_64}</td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>SteamID 32</strong></td>
+<td class="trow1">{$steamid_32}</td>
+</tr>
+<tr>
+<td class="trow1" width="40%"><strong>SteamRep</strong></td>
+<td class="trow1">{$steamrep_link}</td>
+</tr>
+</table>
+<br />{$signature}') . '#i', '{$signature}');
     find_replace_templatesets('footer', '#' . preg_quote('Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.') . '#i', '');
 
 } // close function steamlogin_deactivate
@@ -355,5 +402,52 @@ function steam_output_to_misc() {
 	} // close if($mybb->input['action'] == 'steam_login')
 
 } // close function steam_return
+
+
+/**
+ *
+ * User Profiles - steamify_user_profile
+ * - - - - - - - - - - - - - - -
+ * @desc Adds information relating to Steam to the user profile if the account is linked.
+ * @since 1.5
+ * @version 1.5
+ *
+ */
+function steamify_user_profile()
+{
+
+    global $db, $mybb, $steamid_32, $steamid_64, $steamrep_link, $steam_level;
+
+    require_once MYBB_ROOT.'inc/class_steam.php';
+    $steam = new steam;
+
+    // Get the ID of the user being viewed.
+    $uid = $mybb->input['uid'];
+
+    // Get the possible Steam ID of the user.
+    $user_details = $db->fetch_array($db->simple_select("users", "loginname", "uid = '$uid'"));
+
+    $steamid_64 = 'N/A';
+    $steamid_32 = 'N/A';
+    $steamrep_link = 'N/A';
+    $steam_level = '?';
+
+    // Check to see if loginname is empty, and make sure it's numeric.
+    if($user_details['loginname'] != null and is_numeric($user_details['loginname']))
+    {
+
+        // Get our ID variables.
+        $steamid_64 = $user_details['loginname'];
+        $steamid_32 = $steam->convert64to32($steamid_64);
+
+        // Get the level on the Steam profile.
+        $steam_level = $steam->get_steam_level($steamid_64);
+
+        // Create a link for SteamRep.
+        $steamrep_link = '<a href="http://www.steamrep.com/profiles/'.$steamid_64.'" target="_blank">http://www.steamrep.com/profiles/'.$steamid_64.'</a>';
+
+    } // close if($user_details['loginname'] != null and is_numeric($user_details['loginname']))
+
+} // close function steamify_user_profile
 
 ?>
