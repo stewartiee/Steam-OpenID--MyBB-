@@ -54,7 +54,23 @@ class steam {
 
         } // close else
     } // close function curl
-	
+
+    // With thanks to https://github.com/damianb/tf2stats for the convert64to32 function.
+    function convert64to32($steam_cid)
+    {
+        $id = array('STEAM_0');
+        $id[1] = substr($steam_cid, -1, 1) % 2 == 0 ? 0 : 1;
+        $id[2] = bcsub($steam_cid, '76561197960265728');
+        if(bccomp($id[2], '0') != 1)
+        {
+            return false;
+        }
+        $id[2] = bcsub($id[2], $id[1]);
+        list($id[2], ) = explode('.', bcdiv($id[2], 2), 2);
+        return implode(':', $id);
+    } // close function convert64to32
+
+
     /**
      * get_user_info
      *-------------------------------------
@@ -84,9 +100,12 @@ class steam {
                 $avatar_l = $player_info['avatarfull'];
                 $personastate = $player_info['personastate'];
 
+                $steamid32 = $this->convert64to32($id['steamid']);
+
                 $return_array = array(
                     'status' => 'success',
                     'steamid' => $id['steamid'],
+                    'steamid32' => $steamid32,
                     'personaname' => $personaname,
                     'profileurl' => $profileurl,
                     'avatars' => array(
@@ -119,6 +138,30 @@ class steam {
         return $return_array;
 
 	} // close get_user_info
+
+
+    function get_steam_level($steamid = 0)
+    {
+
+        if($steamid > 0)
+        {
+
+            // Set a default level as ?, just incase something goes wrong.
+            $level = '?';
+
+            // Do the CURL request to the Steam service.
+            $get_response = $this->curl('http://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key='.$this->API_KEY.'&steamid='.$steamid);
+            $get_response = json_decode($get_response);
+
+            // Check if the response is telling us the level.
+            if(isset($get_response->response->player_level)) $level = $get_response->response->player_level;
+
+            // Finally, return it.
+            return $level;
+
+        } // close if($steamid > 0)
+
+    } // close function get_steam_level
 
 
     /**
