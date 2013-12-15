@@ -11,11 +11,14 @@ if(!defined("IN_MYBB")) die("Direct initialization of this file is not allowed.<
 
 // Add to our hooks.
 $plugins->add_hook("misc_start", "steam_output_to_misc");
+$plugins->add_hook("misc_start", "steam_linked");
 $plugins->add_hook("member_login", "steam_redirect");
 $plugins->add_hook("member_register_start", "steam_redirect");
 $plugins->add_hook("no_permission", "steam_redirect", "newreply.php");
 $plugins->add_hook("no_permission", "steam_redirect", "newthread.php");
 $plugins->add_hook("member_profile_start", "steamify_user_profile");
+$plugins->add_hook("usercp_password", "steam_account_linked");
+$plugins->add_hook("usercp_email", "steam_account_linked");
 
 
 /**
@@ -24,7 +27,7 @@ $plugins->add_hook("member_profile_start", "steamify_user_profile");
  * - - - - - - - - - - - - - - -
  * @desc The information to show in the MyBB Administration Dashboard.
  * @since 1.0
- * @version 1.5
+ * @version 1.6
  *
  */
 function steamlogin_info()
@@ -36,7 +39,7 @@ function steamlogin_info()
 		"website"		=> "http://www.calculator.tf",
 		"author"		=> "Ryan Stewart",
 		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.5",
+		"version"		=> "1.6",
 		"guid" 			=> "",
 		"compatibility" => "*"
 	);
@@ -49,7 +52,7 @@ function steamlogin_info()
  * Plugin Activate - steamlogin_activate
  * - - - - - - - - - - - - - - -
  * @since 1.0
- * @version 1.5
+ * @version 1.6
  *
  */
 function steamlogin_activate()
@@ -113,11 +116,22 @@ function steamlogin_activate()
         "gid" => $gid
     );
 
+    $steamlogin_required_field_setting = array(
+        "name" => "steamlogin_required_field",
+        "title" => "Required Field",
+        "description" => "You can set <strong>one</strong> required field here to autofill with the Steam ID of the user. Type the ID of the custom profile field.<br><strong>Required fields are NOT supported by this plugin. It will work with one if you set it here.</strong>",
+        "optionscode" => "text",
+        "value" => "",
+        "disporder" => 5,
+        "gid" => $gid
+    );
+
     // Insert our Settings.
     $db->insert_query("settings", $steamlogin_api_key_setting);
     $db->insert_query("settings", $steamlogin_update_username_setting);
     $db->insert_query("settings", $steamlogin_update_avatar_setting);
     $db->insert_query("settings", $steamlogin_avatar_size_setting);
+    $db->insert_query("settings", $steamlogin_required_field_setting);
 
     // Rebuild our settings to show our new category.
     rebuildsettings();
@@ -137,29 +151,29 @@ function steamlogin_activate()
     // Add a Login button to the "Welcome Block"/
 	find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('{$lang->welcome_register}</a>') . '#i', '{$lang->welcome_register}</a> &mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>');
 
-    // This is released as Open Source. Although this notice isn't required to be kept, i'd appreciate if you could show your support by keeping it here.
-    find_replace_templatesets('member_profile', '#' . preg_quote('{$signature}') . '#i', '<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder">
-<tr>
-<td colspan="2" class="thead"><strong>Steam Details</strong></td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>Level</strong></td>
-<td class="trow1">{$steam_level}</td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>SteamID 64</strong></td>
-<td class="trow1">{$steamid_64}</td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>SteamID 32</strong></td>
-<td class="trow1">{$steamid_32}</td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>SteamRep</strong></td>
-<td class="trow1">{$steamrep_link}</td>
-</tr>
-</table>
-<br />{$signature}');
+    $plugin_templates = array(
+        "tid" => NULL,
+        "title" => 'steamlogin_profile_block',
+        "template" => $db->escape_string('<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder"><tr><td colspan="2" class="thead"><strong>Steam Details</strong></td></tr><tr><td class="trow1" width="40%"><strong>Steam Verified</strong></td><td class="trow1">{$steam_verified}</td></tr><tr><td class="trow1" width="40%"><strong>Level</strong></td><td class="trow1">{$steam_level}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 32</strong></td><td class="trow1">{$steamid_32}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 64</strong></td><td class="trow1"><a href="http://www.steamcommunity.com/profiles/{$steamid_64}" target="_blank">http://www.steamcommunity.com/profiles/{$steamid_64}</a></td></tr><tr><td class="trow1" width="40%"><strong>SteamRep</strong></td><td class="trow1">{$steamrep_link}</td></tr></table><br />'),
+        "sid" => "-1",
+        "version" => $mybb->version + 1,
+        "dateline" => time()
+    );
+
+    $db->insert_query("templates", $plugin_templates);
+
+    $plugin_templates = array(
+        "tid" => NULL,
+        "title" => 'steamlogin_feature_disabled',
+        "template" => $db->escape_string('<html><head><title>{$mybb->settings[\'bbname\']}</title>{$headerinclude}</head><body>{$header}<table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder"><tr><td colspan="2" class="thead"><strong>Feature Disabled</strong></td></tr><tr><td class="trow1" width="40%"><strong>This feature has been disabled on your account.</td></tr></table>{$footer}</body></html>'),
+        "sid" => "-1",
+        "version" => $mybb->version + 1,
+        "dateline" => time()
+    );
+
+    $db->insert_query("templates", $plugin_templates);
+
+    find_replace_templatesets('member_profile', '#' . preg_quote('{$signature}') . '#i', '{$steamlogin_profile_block}{$signature}');
 
     // This is released as Open Source. Although this notice isn't required to be kept, i'd appreciate if you could show your support by keeping it here.
     find_replace_templatesets('footer', '#' . preg_quote('<!-- End powered by -->') . '#i', 'Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.<!-- End powered by -->');
@@ -172,7 +186,7 @@ function steamlogin_activate()
  * Plugin Deactivate - steamlogin_deactivate
  * - - - - - - - - - - - - - - -
  * @since 1.0
- * @version 1.5
+ * @version 1.6
  *
  */
 function steamlogin_deactivate()
@@ -197,29 +211,10 @@ function steamlogin_deactivate()
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
     find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('&mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>') . '#i', '');
-    find_replace_templatesets('member_profile', '#' . preg_quote('<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder">
-<tr>
-<td colspan="2" class="thead"><strong>Steam Details</strong></td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>Level</strong></td>
-<td class="trow1">{$steam_level}</td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>SteamID 64</strong></td>
-<td class="trow1">{$steamid_64}</td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>SteamID 32</strong></td>
-<td class="trow1">{$steamid_32}</td>
-</tr>
-<tr>
-<td class="trow1" width="40%"><strong>SteamRep</strong></td>
-<td class="trow1">{$steamrep_link}</td>
-</tr>
-</table>
-<br />{$signature}') . '#i', '{$signature}');
+    find_replace_templatesets('member_profile', '#' . preg_quote('{$steamlogin_profile_block}{$signature}') . '#i', '{$signature}');
     find_replace_templatesets('footer', '#' . preg_quote('Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.') . '#i', '');
+
+    $db->delete_query("templates", "title LIKE 'steamlogin_%' AND sid='-1'");
 
 } // close function steamlogin_deactivate
 
@@ -231,7 +226,7 @@ function steamlogin_deactivate()
  * - - - - - - - - - - - - - - -
  * @desc Redirects the browser to Steam OpenID website for login.
  * @since 1.0
- * @version 1.0
+ * @version 1.6
  *
  */
 function steam_redirect()
@@ -248,16 +243,21 @@ function steam_redirect()
 		if($get_key['value'] == null) {
 
 			// The Steam API key hasn't been set, so stop the script and output error message.
-			echo "The Steam Login plugin hasn't been configured correctly.";
+            die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
 
 		} else { // close if($get_key['value'] == null)
+
+            // Do a check for required profile fields.
+            $count_required_fields = $db->num_rows($db->simple_select("profilefields", "*", "required = '1'"));
+
+            $return_url = '/misc.php?action=steam_return';
 
 			//Set options for the OpenID library.
 		    require_once MYBB_ROOT.'inc/class_lightopenid.php';
 
 			$SteamOpenID = new LightOpenID();
-			$SteamOpenID->returnUrl = $mybb->settings['bburl'].'/misc.php?action=steam_return';
-		    $SteamOpenID->__set('realm', $mybb->settings['bburl'].'/misc.php?action=steam_return');
+			$SteamOpenID->returnUrl = $mybb->settings['bburl'].$return_url;
+		    $SteamOpenID->__set('realm', $mybb->settings['bburl'].$return_url);
 
 		    $SteamOpenID->identity = 'http://steamcommunity.com/openid';
 
@@ -277,7 +277,7 @@ function steam_redirect()
  * - - - - - - - - - - - - - - -
  * @desc This function is holds the actions issued by the Steam Login plugin.
  * @since 1.0
- * @version 1.4
+ * @version 1.6
  *
  */
 function steam_output_to_misc() {
@@ -299,10 +299,11 @@ function steam_output_to_misc() {
         $check_update_username = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_username'"));
         $check_update_avatar = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_avatar'"));
         $check_avatar_size = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_avatar_size'"));
+        $check_required_field = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_required_field'"));
 
     	if($get_key['value'] == null) {
 
-    		echo "The Steam Login plugin hasn't been configured correctly.";
+    		die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
 
     	} else {
 
@@ -365,6 +366,15 @@ function steam_output_to_misc() {
 						"loginname" => $steamid
 					);
 
+                    if($check_required_field['value'] != "" and is_numeric($check_required_field['value']))
+                    {
+
+                        // Check the field exists.
+                        $field_exists = $db->num_rows($db->simple_select("profilefields", "*", "fid = '".$check_required_field['value']."'"));
+                        if($field_exists > 0) $new_user_data['profile_fields']['fid'.$check_required_field['value']] = $steamid;
+
+                    }
+
 					$userhandler->set_data($new_user_data);
 
 					if ($userhandler->validate_user()) {
@@ -416,7 +426,7 @@ function steam_output_to_misc() {
 function steamify_user_profile()
 {
 
-    global $db, $mybb, $steamid_32, $steamid_64, $steamrep_link, $steam_level;
+    global $db, $mybb, $steamid_32, $steamid_64, $steamrep_link, $steam_level, $steam_verified, $steamlogin_profile_block, $templates, $theme;
 
     require_once MYBB_ROOT.'inc/class_steam.php';
     $steam = new steam;
@@ -427,6 +437,7 @@ function steamify_user_profile()
     // Get the possible Steam ID of the user.
     $user_details = $db->fetch_array($db->simple_select("users", "loginname", "uid = '$uid'"));
 
+    $steam_verified = 'No';
     $steamid_64 = 'N/A';
     $steamid_32 = 'N/A';
     $steamrep_link = 'N/A';
@@ -443,11 +454,64 @@ function steamify_user_profile()
         // Get the level on the Steam profile.
         $steam_level = $steam->get_steam_level($steamid_64);
 
+        $steam_verified = 'Yes';
+
         // Create a link for SteamRep.
         $steamrep_link = '<a href="http://www.steamrep.com/profiles/'.$steamid_64.'" target="_blank">http://www.steamrep.com/profiles/'.$steamid_64.'</a>';
+
+        eval("\$steamlogin_profile_block = \"".$templates->get("steamlogin_profile_block")."\";");
 
     } // close if($user_details['loginname'] != null and is_numeric($user_details['loginname']))
 
 } // close function steamify_user_profile
+
+
+/**
+ *
+ * Steam Linked - steam_linked
+ * - - - - - - - - - - - - - - -
+ * @desc Outputs a page for a disabled feature if user is linked to Steam.
+ * @since 1.6
+ * @version 1.6
+ *
+ */
+function steam_linked()
+{
+
+    global $mybb, $index, $header, $headerinclude, $footer, $templates, $theme;
+
+    eval("\$index = \"".$templates->get("steamlogin_feature_disabled")."\";");
+    output_page($index);
+
+} // close function steam_linked
+
+
+/**
+ *
+ * Steam Account Linked - steam_account_linked
+ * - - - - - - - - - - - - - - -
+ * @desc Redirects to steam_linked function.
+ * @since 1.6
+ * @version 1.6
+ *
+ */
+function steam_account_linked()
+{
+
+    global $mybb;
+
+    if($mybb->user['uid'] > 0)
+    {
+
+        if($mybb->user['loginname'] != null and is_numeric($mybb->user['loginname']))
+        {
+
+            header("Location: misc.php?action=steam_linked");
+
+        } // close if($mybb->user['loginname'] != null and is_numeric($mybb->user['loginname']))
+
+    } // close if($mybb->user['uid'] > 0)
+
+} // close function steam_account_linked
 
 ?>
