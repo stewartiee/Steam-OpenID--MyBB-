@@ -480,8 +480,11 @@ function steam_linked()
 
     global $mybb, $index, $header, $headerinclude, $footer, $templates, $theme;
 
-    eval("\$index = \"".$templates->get("steamlogin_feature_disabled")."\";");
-    output_page($index);
+    if($mybb->input['action'] == 'steam_linked')
+    {
+        eval("\$index = \"".$templates->get("steamlogin_feature_disabled")."\";");
+        output_page($index);
+    }
 
 } // close function steam_linked
 
