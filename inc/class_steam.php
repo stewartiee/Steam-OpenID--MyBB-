@@ -11,12 +11,17 @@ class steam {
     // You can get an API key by going to http://steamcommunity.com/dev/apikey
     public $API_KEY = "";
 
-    function __construct() {
+    function __construct()
+    {
         global $db;
 
         $get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
         $this->API_KEY = $get_key['value'];
-    }
+
+        // Check CURL is installed, if not KILL!
+        if(!function_exists('curl_version')) die("You don't have CURL installed on your server. This is a requirement. Without it, nothing would work...");
+
+    } // close function __construct
     
     function curl($url)
     {

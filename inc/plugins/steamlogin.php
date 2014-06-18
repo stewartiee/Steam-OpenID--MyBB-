@@ -12,6 +12,7 @@ if(!defined("IN_MYBB")) die("Direct initialization of this file is not allowed.<
 // Add to our hooks.
 $plugins->add_hook("misc_start", "steam_output_to_misc");
 $plugins->add_hook("misc_start", "steam_linked");
+$plugins->add_hook("misc_start", "fix_steam_username");
 $plugins->add_hook("member_login", "steam_redirect");
 $plugins->add_hook("member_register_start", "steam_redirect");
 $plugins->add_hook("no_permission", "steam_redirect", "newreply.php");
@@ -33,9 +34,17 @@ $plugins->add_hook("usercp_email", "steam_account_linked");
 function steamlogin_info()
 {
 
+    // Do a check if CURL is installed.
+    $curl_installed = false;
+    $curl_message = null;
+    if(function_exists('curl_version')) $curl_installed = true;
+
+    $curl_message = "<br>&check; You have the required dependencies to use this plugin.<br>";
+    if(!$curl_installed) $curl_message = "<br><strong>&times; You don't have CURL installed. This plugin won't work.</strong><br>";
+
 	return array(
 		"name"			=> "Steam Login",
-		"description"	=> "Allows the registration of accounts through Steam. (For support/issues please visit https://github.com/stewartiee/Steam-OpenID--MyBB-)",
+		"description"	=> "Allows the registration of accounts through Steam. (For support/issues please visit https://github.com/stewartiee/Steam-OpenID--MyBB-)$curl_message",
 		"website"		=> "http://www.calculator.tf",
 		"author"		=> "Ryan Stewart",
 		"authorsite"	=> "http://www.calculator.tf",
@@ -72,7 +81,7 @@ function steamlogin_activate()
     
     // Our new Setting group ID.
     $gid = intval($db->insert_id());
-    
+
     $steamlogin_api_key_setting = array(
         "name" => "steamlogin_api_key",
         "title" => "Steam API Key",
@@ -400,7 +409,7 @@ function steam_output_to_misc() {
 			    $user = $db->fetch_array($db->simple_select("users", "*", "loginname = '$steamid'"));
 
 			    // Login the user.
-				my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], $remember, true);
+				my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], true, true);
 				my_setcookie("sid", $session->sid, -1, true);
 
 				redirect("index.php", 'Your account has been authenticated and you have been logged in.<br/> Powered By <a href="http://www.steampowered.com" target="_blank">Steam</a>', 'Login via Steam');
@@ -516,5 +525,69 @@ function steam_account_linked()
     } // close if($mybb->user['uid'] > 0)
 
 } // close function steam_account_linked
+
+
+function fix_steam_username()
+{
+
+    global $db, $mybb;
+
+    if($mybb->user['uid'] > 0 && $mybb->usergroup['cancp'])
+    {
+
+        $get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
+
+        if($get_key['value'] != null)
+        {
+
+            require_once MYBB_ROOT.'inc/class_steam.php';
+
+            // Create a new instance of the Steam class.
+            $steam = new steam;
+
+            // Grab a list of all users.
+            $users_result = $db->simple_select("users", "uid, loginname", "");
+
+            while($user = $db->fetch_array($users_result))
+            {
+
+                $uid = $user['uid'];
+                $loginname = $user['loginname'];
+
+                if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
+                {
+
+                    // Get the details of the user from their Steam ID.
+                    $user_details = $steam->get_user_info($loginname);
+
+                    // Get the persona from the Steam service.
+                    $personaname = $user_details['personaname'];
+
+                    // Create an array of data to update.
+                    $update = array();
+                    $update['loginname'] = $personaname;
+
+                    // Run the update query.
+                    $db->update_query('users', $update, "uid = '$uid'");
+
+                } // close if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
+
+            } // close while($user = $db->fetch_array($users_result))
+
+            die("<p>Any user(s) that were missing a Steam name will have now been updated.</p>");
+
+        } else { // close if(!is_null($get_key))
+
+            die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
+
+        } // close else
+
+    } else { // close if($mybb->user['uid'] > 0)
+
+        die("You shouldn't be here...");
+
+    } // close else
+
+} // close function
 
 ?>
