@@ -535,52 +535,56 @@ function fix_steam_username()
     if($mybb->user['uid'] > 0 && $mybb->usergroup['cancp'])
     {
 
-        $get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
-
-        if($get_key['value'] != null)
+        if($mybb->input['action'] == 'fix_steam_username')
         {
+            $get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
 
-            require_once MYBB_ROOT.'inc/class_steam.php';
-
-            // Create a new instance of the Steam class.
-            $steam = new steam;
-
-            // Grab a list of all users.
-            $users_result = $db->simple_select("users", "uid, loginname", "");
-
-            while($user = $db->fetch_array($users_result))
+            if($get_key['value'] != null)
             {
 
-                $uid = $user['uid'];
-                $loginname = $user['loginname'];
+                require_once MYBB_ROOT.'inc/class_steam.php';
 
-                if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
+                // Create a new instance of the Steam class.
+                $steam = new steam;
+
+                // Grab a list of all users.
+                $users_result = $db->simple_select("users", "uid, loginname", "");
+
+                while($user = $db->fetch_array($users_result))
                 {
 
-                    // Get the details of the user from their Steam ID.
-                    $user_details = $steam->get_user_info($loginname);
+                    $uid = $user['uid'];
+                    $loginname = $user['loginname'];
 
-                    // Get the persona from the Steam service.
-                    $personaname = $user_details['personaname'];
+                    if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
+                    {
 
-                    // Create an array of data to update.
-                    $update = array();
-                    $update['loginname'] = $personaname;
+                        // Get the details of the user from their Steam ID.
+                        $user_details = $steam->get_user_info($loginname);
 
-                    // Run the update query.
-                    $db->update_query('users', $update, "uid = '$uid'");
+                        // Get the persona from the Steam service.
+                        $personaname = $user_details['personaname'];
 
-                } // close if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
+                        // Create an array of data to update.
+                        $update = array();
+                        $update['loginname'] = $personaname;
 
-            } // close while($user = $db->fetch_array($users_result))
+                        // Run the update query.
+                        $db->update_query('users', $update, "uid = '$uid'");
 
-            die("<p>Any user(s) that were missing a Steam name will have now been updated.</p>");
+                    } // close if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
 
-        } else { // close if(!is_null($get_key))
+                } // close while($user = $db->fetch_array($users_result))
 
-            die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
+                die("<p>Any user(s) that were missing a Steam name will have now been updated.</p>");
 
-        } // close else
+            } else { // close if(!is_null($get_key))
+
+                die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
+
+            } // close else
+
+        }
 
     } else { // close if($mybb->user['uid'] > 0)
 
