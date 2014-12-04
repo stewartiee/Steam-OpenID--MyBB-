@@ -4,6 +4,7 @@
  * ----------------------------------
  * Provided with no warranties by Ryan Stewart (www.calculator.tf)
  * This has been tested on MyBB 1.6
+ * This has been fixed and tested for MyBB 1.8 by IceMan (www.tf2.ro)
  */
  
 // Disallow direct access to this file for security reasons
@@ -46,11 +47,11 @@ function steamlogin_info()
 		"name"			=> "Steam Login",
 		"description"	=> "Allows the registration of accounts through Steam. (For support/issues please visit https://github.com/stewartiee/Steam-OpenID--MyBB-)$curl_message",
 		"website"		=> "http://www.calculator.tf",
-		"author"		=> "Ryan Stewart",
+		"author"		=> "Ryan Stewart & IceMan",
 		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.6",
+		"version"		=> "1.6.1",
 		"guid" 			=> "",
-		"compatibility" => "*"
+		"compatibility" => "16, 18"
 	);
 
 } // close function steamlogin_info
@@ -117,9 +118,9 @@ function steamlogin_activate()
         "title" => "Avatar Size",
         "description" => "Set whether to use the small, medium or large avatar from the Steam API.",
         "optionscode" => "select
-0=Small
-1=Medium
-2=Large",
+        0=Small
+        1=Medium
+        2=Large",
         "value" => "2",
         "disporder" => 4,
         "gid" => $gid
@@ -143,7 +144,7 @@ function steamlogin_activate()
     $db->insert_query("settings", $steamlogin_required_field_setting);
 
     // Rebuild our settings to show our new category.
-    rebuildsettings();
+    rebuild_settings();
 
     /**
      * Perform an update to the username length.
@@ -163,7 +164,7 @@ function steamlogin_activate()
     $plugin_templates = array(
         "tid" => NULL,
         "title" => 'steamlogin_profile_block',
-        "template" => $db->escape_string('<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder"><tr><td colspan="2" class="thead"><strong>Steam Details</strong></td></tr><tr><td class="trow1" width="40%"><strong>Steam Verified</strong></td><td class="trow1">{$steam_verified}</td></tr><tr><td class="trow1" width="40%"><strong>Level</strong></td><td class="trow1">{$steam_level}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 32</strong></td><td class="trow1">{$steamid_32}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 64</strong></td><td class="trow1"><a href="http://www.steamcommunity.com/profiles/{$steamid_64}" target="_blank">http://www.steamcommunity.com/profiles/{$steamid_64}</a></td></tr><tr><td class="trow1" width="40%"><strong>SteamRep</strong></td><td class="trow1">{$steamrep_link}</td></tr></table><br />'),
+        "template" => $db->escape_string('<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder"><tr><td colspan="2" class="thead"><strong>Steam Details</strong></td></tr><tr><td class="trow1" width="40%"><strong>Steam Verified</strong></td><td class="trow1">{$steam_verified}</td></tr><tr><td class="trow1" width="40%"><strong>Level</strong></td><td class="trow1">{$steam_level}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 32</strong></td><td class="trow1">{$steamid_32}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 64</strong></td><td class="trow1"><a href="http://www.steamcommunity.com/profiles/{$steamid_64}" target="_blank">http://www.steamcommunity.com/profiles/{$steamid_64}</a></td></tr><tr><td class="trow1" width="40%"><strong>SteamRep</strong></td><td class="trow1">{$steamrep_link}</td></tr><tr><td class="trow1" width="40%"><strong>Steam Status</strong></td><td class="trow1">{$steam_status}</td></tr></table><br />'),
         "sid" => "-1",
         "version" => $mybb->version + 1,
         "dateline" => time()
@@ -435,7 +436,7 @@ function steam_output_to_misc() {
 function steamify_user_profile()
 {
 
-    global $db, $mybb, $steamid_32, $steamid_64, $steamrep_link, $steam_level, $steam_verified, $steamlogin_profile_block, $templates, $theme;
+    global $db, $mybb, $steamid_32, $steamid_64, $steamrep_link, $steam_level, $steam_status, $steam_verified, $steamlogin_profile_block, $templates, $theme;
 
     require_once MYBB_ROOT.'inc/class_steam.php';
     $steam = new steam;
@@ -451,6 +452,7 @@ function steamify_user_profile()
     $steamid_32 = 'N/A';
     $steamrep_link = 'N/A';
     $steam_level = '?';
+    $steam_status = 'N/A';
 
     // Check to see if loginname is empty, and make sure it's numeric.
     if($user_details['loginname'] != null and is_numeric($user_details['loginname']))
@@ -467,6 +469,9 @@ function steamify_user_profile()
 
         // Create a link for SteamRep.
         $steamrep_link = '<a href="http://www.steamrep.com/profiles/'.$steamid_64.'" target="_blank">http://www.steamrep.com/profiles/'.$steamid_64.'</a>';
+
+        // Get our steam status
+        $steam_status = '<a href="http://www.steamcommunity.com/profiles/'.$steamid_64.'" target="_blank"><img src="http://steamsignature.com/status/english/'.$steamid_64.'.png" /></a><a href="steam://friends/add/'.$steamid_64.'"><img src="http://steamsignature.com/AddFriend.png"></a>';
 
         eval("\$steamlogin_profile_block = \"".$templates->get("steamlogin_profile_block")."\";");
 
