@@ -1,13 +1,52 @@
 <?php
 /**
- * Steam Login
- * ----------------------------------
- * Provided with no warranties by Ryan Stewart (www.calculator.tf)
- * This has been tested on MyBB 1.6
+ * This class provides a simple interface for OpenID (1.1 and 2.0) authentication.
+ * Supports Yadis discovery.
+ * The authentication process is stateless/dumb.
  *
- * LightOpenID - http://code.google.com/p/lightopenid/
+ * Usage:
+ * Sign-on with OpenID is a two step process:
+ * Step one is authentication with the provider:
+ * <code>
+ * $openid = new LightOpenID('my-host.example.org');
+ * $openid->identity = 'ID supplied by user';
+ * header('Location: ' . $openid->authUrl());
+ * </code>
+ * The provider then sends various parameters via GET, one of them is openid_mode.
+ * Step two is verification:
+ * <code>
+ * $openid = new LightOpenID('my-host.example.org');
+ * if ($openid->mode) {
+ *     echo $openid->validate() ? 'Logged in.' : 'Failed';
+ * }
+ * </code>
+ *
+ * Change the 'my-host.example.org' to your domain name. Do NOT use $_SERVER['HTTP_HOST']
+ * for that, unless you know what you are doing.
+ *
+ * Optionally, you can set $returnUrl and $realm (or $trustRoot, which is an alias).
+ * The default values for those are:
+ * $openid->realm     = (!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+ * $openid->returnUrl = $openid->realm . $_SERVER['REQUEST_URI'];
+ * If you don't know their meaning, refer to any openid tutorial, or specification. Or just guess.
+ *
+ * AX and SREG extensions are supported.
+ * To use them, specify $openid->required and/or $openid->optional before calling $openid->authUrl().
+ * These are arrays, with values being AX schema paths (the 'path' part of the URL).
+ * For example:
+ *   $openid->required = array('namePerson/friendly', 'contact/email');
+ *   $openid->optional = array('namePerson/first');
+ * If the server supports only SREG or OpenID 1.1, these are automaticaly
+ * mapped to SREG names, so that user doesn't have to know anything about the server.
+ *
+ * To get the values, use $openid->getAttributes().
+ *
+ *
+ * The library requires PHP >= 5.1.2 with curl or http/https stream wrappers enabled.
+ * @author Mewp
+ * @copyright Copyright (c) 2010, Mewp
+ * @license http://www.opensource.org/licenses/mit-license.php MIT
  */
-
 class LightOpenID
 {
     public $returnUrl
@@ -16,7 +55,6 @@ class LightOpenID
          , $verify_peer = null
          , $capath = null
          , $cainfo = null
-         , $host = 'http://steamcommunity.com/openid'
          , $data;
     private $identity, $claimed_id;
     protected $server, $version, $trustRoot, $aliases, $identifier_select = false
@@ -33,17 +71,8 @@ class LightOpenID
         'pref/timezone'           => 'timezone',
         );
 
-    function __construct()
+    function __construct($host)
     {
-        $args = func_get_args();
-        if ($args) {
-            $this->returnUrl = $args[0];
-            $frags = parse_url($args[0]);
-            $host = $frags['host'];
-        } else {
-            $host = $_SERVER['HTTP_HOST'];
-        }
-
         $this->trustRoot = (strpos($host, '://') ? $host : 'http://' . $host);
         if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off')
             || (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
@@ -56,19 +85,13 @@ class LightOpenID
             $this->trustRoot = substr($this->trustRoot, 0, $host_end);
         }
 
-        if (!$args) {
-            $uri = rtrim(preg_replace('#((?<=\?)|&)openid\.[^&]+#', 
-                '', $_SERVER['REQUEST_URI']), '?');        
-            
-            # almost guaranteed not to work, unless login and return pages
-            # are the same
-            $this->returnUrl = $this->trustRoot . $uri;
-        }
+        $uri = rtrim(preg_replace('#((?<=\?)|&)openid\.[^&]+#', '', $_SERVER['REQUEST_URI']), '?');
+        $this->returnUrl = $this->trustRoot . $uri;
+
         $this->data = ($_SERVER['REQUEST_METHOD'] === 'POST') ? $_POST : $_GET;
 
         if(!function_exists('curl_init') && !in_array('https', stream_get_wrappers())) {
             throw new ErrorException('You must have either https wrappers or curl enabled.');
-
         }
     }
 
@@ -692,6 +715,7 @@ class LightOpenID
             $this->returnUrl .= (strpos($this->returnUrl, '?') ? '&' : '?')
                              .  'openid.claimed_id=' . $this->claimed_id;
         }
+
         if ($this->data['openid_return_to'] != $this->returnUrl) {
             # The return_to url must match the url of current request.
             # I'm assuing that noone will set the returnUrl to something that doesn't make sense.
@@ -805,4 +829,3 @@ class LightOpenID
         return $this->getSregAttributes();
     }
 }
-?>

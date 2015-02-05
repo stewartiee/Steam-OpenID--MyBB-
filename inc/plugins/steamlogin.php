@@ -1,602 +1,400 @@
-<?php 
+<?php
 /**
  * Steam Login
- * ----------------------------------
- * Provided with no warranties by Ryan Stewart (www.calculator.tf)
- * This has been tested on MyBB 1.6
- * This has been fixed and tested for MyBB 1.8 by IceMan (www.tf2.ro)
+ * - - - - - -
+ * Enables the ability to login through Steam to your forum.
+ * Coded by Ryan Stewart
+ * Find the source on GitHub
  */
- 
+
 // Disallow direct access to this file for security reasons
 if(!defined("IN_MYBB")) die("Direct initialization of this file is not allowed.<br /><br />Please make sure IN_MYBB is defined.");
 
-// Add to our hooks.
-$plugins->add_hook("misc_start", "steam_output_to_misc");
-$plugins->add_hook("misc_start", "steam_linked");
-$plugins->add_hook("misc_start", "fix_steam_username");
-$plugins->add_hook("member_login", "steam_redirect");
-$plugins->add_hook("member_register_start", "steam_redirect");
-$plugins->add_hook("no_permission", "steam_redirect", "newreply.php");
-$plugins->add_hook("no_permission", "steam_redirect", "newthread.php");
-$plugins->add_hook("member_profile_start", "steamify_user_profile");
-$plugins->add_hook("usercp_password", "steam_account_linked");
-$plugins->add_hook("usercp_email", "steam_account_linked");
+// Add all the hooks required by the plugin.
+$plugins->add_hook('misc_start', 'steam_link');
+$plugins->add_hook('member_do_register_end', 'complete_steam_link_register');
+$plugins->add_hook('postbit', 'add_to_postbit');
+$plugins->add_hook('usercp_start', 'steam_link_page');
+
+// Create our template edits required.
+$usercp_nav_link_edit = '<tr><td class="trow1 smalltext"><a href="usercp.php?action=steam_link" class="usercp_nav_item" style="background-image: url(inc/plugins/steamlogin/img/steam_icon.png);background-position:0;background-repeat:no-repeat;">Link to Steam Account</a></td></tr>';
+$postbit_steam_id_edit = '<br />Steam ID: {steam_linked}';
+$welcomeblock_edit = '<a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_link"><img border="0" src="inc/plugins/steamlogin/img/steam_wide.png" alt="Login with Steam"></a>';
 
 
-/**
- *
- * Plugin Info - steamlogin_info
- * - - - - - - - - - - - - - - -
- * @desc The information to show in the MyBB Administration Dashboard.
- * @since 1.0
- * @version 1.6
- *
- */
 function steamlogin_info()
 {
-
-    // Do a check if CURL is installed.
-    $curl_installed = false;
-    $curl_message = null;
-    if(function_exists('curl_version')) $curl_installed = true;
-
-    $curl_message = "<br>&check; You have the required dependencies to use this plugin.<br>";
-    if(!$curl_installed) $curl_message = "<br><strong>&times; You don't have CURL installed. This plugin won't work.</strong><br>";
-
-	return array(
-		"name"			=> "Steam Login",
-		"description"	=> "Allows the registration of accounts through Steam. (For support/issues please visit https://github.com/stewartiee/Steam-OpenID--MyBB-)$curl_message",
-		"website"		=> "http://www.calculator.tf",
-		"author"		=> "Ryan Stewart & IceMan",
-		"authorsite"	=> "http://www.calculator.tf",
-		"version"		=> "1.6.1",
-		"guid" 			=> "",
-		"compatibility" => "16, 18"
-	);
-
+    return array(
+        "name"			=> "Steam Login",
+        "description"	=> "Enables the ability to login through Steam to your forum.",
+        "website"		=> "http://www.mybb.com",
+        "author"		=> "Ryan Stewart",
+        "authorsite"	=> "https://github.com/stewartiee/Steam-OpenID--MyBB-",
+        "version"		=> "2.0",
+        "guid" 			=> "",
+        "compatibility" => "*"
+    );
 } // close function steamlogin_info
 
 
-/**
- *
- * Plugin Activate - steamlogin_activate
- * - - - - - - - - - - - - - - -
- * @since 1.0
- * @version 1.6
- *
- */
 function steamlogin_activate()
 {
-	global $db, $mybb, $templates;
 
-    $steamlogin_settings = array(
-        "name" => "steamlogin",
-        "title" => "Steam Login - Settings",
-        "description" => "Modify the settings of the Steam Login plugin.",
-        "disporder" => "0",
-        "isdefault" => "no",
+    global $db, $lang, $usercp_nav_link_edit, $postbit_steam_id_edit, $welcomeblock_edit;
+
+    // Create a Settings group for the plugin.
+    $settings_group = array(
+        'name' => 'steamlogin',
+        'title' => 'Steam Login',
+        'description' => 'Manage the settings for Steam Login.',
+        'disporder' => 0,
+        'isdefault' => 'no'
     );
-    
-    // Create our Setting group in the database.
-    $db->insert_query("settinggroups", $steamlogin_settings);
-    
-    // Our new Setting group ID.
+    $db->insert_query('settinggroups', $settings_group);
+
     $gid = intval($db->insert_id());
 
+    // Create a new setting for API key.
     $steamlogin_api_key_setting = array(
-        "name" => "steamlogin_api_key",
-        "title" => "Steam API Key",
-        "description" => "You can get an API key by going to the following website: http://steamcommunity.com/dev/apikey",
-        "optionscode" => "text",
-        "value" => "",
-        "disporder" => 1,
-        "gid" => $gid
+        array(
+            'name' => 'steamlogin_api_key',
+            'title' => 'Steam API Key',
+            'description' => 'You can get an API key by going to the following website: http://steamcommunity.com/dev/apikey',
+            'optionscode' => 'text',
+            'value' => '',
+            'disporder' => 1,
+            'gid' => $gid
+        )
     );
+    $db->insert_query_multiple('settings', $steamlogin_api_key_setting);
 
-    $steamlogin_update_username_setting = array(
-        "name" => "steamlogin_update_username",
-        "title" => "Update Username",
-        "description" => "Should the plugin be allowed to update the username of the user on each login? (If a user changes their name on Steam, this will update here too.)",
-        "optionscode" => "yesno",
-        "value" => "no",
-        "disporder" => 2,
-        "gid" => $gid
-    );
-
-    $steamlogin_update_avatar_setting = array(
-        "name" => "steamlogin_update_avatar",
-        "title" => "Update Avatar",
-        "description" => "Should the plugin be allowed to update the avatar of the user to that of their Steam account?",
-        "optionscode" => "yesno",
-        "value" => "yes",
-        "disporder" => 3,
-        "gid" => $gid
-    );
-
-    $steamlogin_avatar_size_setting = array(
-        "name" => "steamlogin_avatar_size",
-        "title" => "Avatar Size",
-        "description" => "Set whether to use the small, medium or large avatar from the Steam API.",
-        "optionscode" => "select
-        0=Small
-        1=Medium
-        2=Large",
-        "value" => "2",
-        "disporder" => 4,
-        "gid" => $gid
-    );
-
-    $steamlogin_required_field_setting = array(
-        "name" => "steamlogin_required_field",
-        "title" => "Required Field",
-        "description" => "You can set <strong>one</strong> required field here to autofill with the Steam ID of the user. Type the ID of the custom profile field.<br><strong>Required fields are NOT supported by this plugin. It will work with one if you set it here.</strong>",
-        "optionscode" => "text",
-        "value" => "",
-        "disporder" => 5,
-        "gid" => $gid
-    );
-
-    // Insert our Settings.
-    $db->insert_query("settings", $steamlogin_api_key_setting);
-    $db->insert_query("settings", $steamlogin_update_username_setting);
-    $db->insert_query("settings", $steamlogin_update_avatar_setting);
-    $db->insert_query("settings", $steamlogin_avatar_size_setting);
-    $db->insert_query("settings", $steamlogin_required_field_setting);
-
-    // Rebuild our settings to show our new category.
     rebuild_settings();
 
-    /**
-     * Perform an update to the username length.
-     */
-    $update_username_length = $db->update_query("settings",array('value' => '70'),"name = 'maxnamelength'");
+    // Create query to add ID column for Steam ID.
+    $db->add_column('users', 'steam_id', 'BIGINT(17) NOT NULL DEFAULT 0');
 
-    /**
-     * Template Edits
-     * - - - - - - - - - - - - - - -
-     * Template edits required by the plugin.
-     */
-    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    // The template to show the user that's linked.
+    $steam_profile_link_template = '<img border="0" src="{$steam_info[\'avatar\']}" alt="{$steam_info[\'personaname\']}\'s Avatar" style="width:16px;height:16px;vertical-align:middle"> <a href="http://www.steamcommunity.com/profiles/{$post[\'steam_id\']}" target="_blank" title="Click this link to view their Steam Profile">{$steam_info[\'personaname\']}</a>';
 
-    // Add a Login button to the "Welcome Block"/
-	find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('{$lang->welcome_register}</a>') . '#i', '{$lang->welcome_register}</a> &mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>');
+    $steam_profile_link_insert_array = array(
+        'title' => 'steam_profile_link',
+        'template' => $db->escape_string($steam_profile_link_template),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time()
+    );
+    $db->insert_query('templates', $steam_profile_link_insert_array);
 
-    $plugin_templates = array(
-        "tid" => NULL,
-        "title" => 'steamlogin_profile_block',
-        "template" => $db->escape_string('<br /><table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder"><tr><td colspan="2" class="thead"><strong>Steam Details</strong></td></tr><tr><td class="trow1" width="40%"><strong>Steam Verified</strong></td><td class="trow1">{$steam_verified}</td></tr><tr><td class="trow1" width="40%"><strong>Level</strong></td><td class="trow1">{$steam_level}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 32</strong></td><td class="trow1">{$steamid_32}</td></tr><tr><td class="trow1" width="40%"><strong>SteamID 64</strong></td><td class="trow1"><a href="http://www.steamcommunity.com/profiles/{$steamid_64}" target="_blank">http://www.steamcommunity.com/profiles/{$steamid_64}</a></td></tr><tr><td class="trow1" width="40%"><strong>SteamRep</strong></td><td class="trow1">{$steamrep_link}</td></tr><tr><td class="trow1" width="40%"><strong>Steam Status</strong></td><td class="trow1">{$steam_status}</td></tr></table><br />'),
-        "sid" => "-1",
-        "version" => $mybb->version + 1,
-        "dateline" => time()
+    // The template for our User CP page.
+    $steam_link_usercp_template = '<html>
+<head>
+<title>{$mybb->settings[\'bbname\']} - {$lang->steam_usercp_heading}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<table width="100%" border="0" align="center">
+<tr>
+	{$usercpnav}
+	<td valign="top">
+		<table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder">
+			<tr>
+				<td class="thead"><strong>{$lang->steam_usercp_heading}</strong></td>
+			</tr>
+          	<tr>
+            	<td width="100%" class="tcat"><span class="smalltext"><strong>Overview</strong></span></td>
+          	</tr>
+          	<tr>
+            	<td class="trow1" valign="top">
+              		<p>{$lang->steam_overview_message}</p>
+                  {$link_status}
+            	</td>
+          	</tr>
+		</table>
+	</td>
+</tr>
+</table>
+</form>
+{$footer}
+</body>
+</html>';
+
+    $steam_link_usercp_insert_array = array(
+        'title' => 'steam_link_usercp',
+        'template' => $db->escape_string($steam_link_usercp_template),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time()
+    );
+    $db->insert_query('templates', $steam_link_usercp_insert_array);
+
+    require_once MYBB_ROOT.'/inc/adminfunctions_templates.php';
+
+    // Add a link to our new User CP page.
+    find_replace_templatesets(
+        'usercp_nav_misc',
+        '#' . preg_quote('id="usercpmisc_e">') . '#i',
+        'id="usercpmisc_e">' . $usercp_nav_link_edit
     );
 
-    $db->insert_query("templates", $plugin_templates);
-
-    $plugin_templates = array(
-        "tid" => NULL,
-        "title" => 'steamlogin_feature_disabled',
-        "template" => $db->escape_string('<html><head><title>{$mybb->settings[\'bbname\']}</title>{$headerinclude}</head><body>{$header}<table border="0" cellspacing="{$theme[\'borderwidth\']}" cellpadding="{$theme[\'tablespace\']}" class="tborder"><tr><td colspan="2" class="thead"><strong>Feature Disabled</strong></td></tr><tr><td class="trow1" width="40%"><strong>This feature has been disabled on your account.</td></tr></table>{$footer}</body></html>'),
-        "sid" => "-1",
-        "version" => $mybb->version + 1,
-        "dateline" => time()
+    // Add some postbit information for the linked account.
+    find_replace_templatesets(
+        'postbit_author_user',
+        '#' . preg_quote('{$post[\'userregdate\']}') . '#i',
+        '{$post[\'userregdate\']}' . $postbit_steam_id_edit
     );
 
-    $db->insert_query("templates", $plugin_templates);
-
-    find_replace_templatesets('member_profile', '#' . preg_quote('{$signature}') . '#i', '{$steamlogin_profile_block}{$signature}');
-
-    // This is released as Open Source. Although this notice isn't required to be kept, i'd appreciate if you could show your support by keeping it here.
-    find_replace_templatesets('footer', '#' . preg_quote('<!-- End powered by -->') . '#i', 'Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.<!-- End powered by -->');
+    // Add a "Login with Steam" button to the welcomeblock.
+    find_replace_templatesets(
+        'header_welcomeblock_guest',
+        '#' . preg_quote('{$lang->welcome_register}</a>') . '#i',
+        '{$lang->welcome_register}</a>' . $welcomeblock_edit
+    );
 
 } // close function steamlogin_activate
 
 
-/**
- *
- * Plugin Deactivate - steamlogin_deactivate
- * - - - - - - - - - - - - - - -
- * @since 1.0
- * @version 1.6
- *
- */
 function steamlogin_deactivate()
 {
 
-	global $db;
+    global $db, $templates, $usercp_nav_link_edit, $postbit_steam_id_edit, $welcomeblock_edit;
 
-    // Delete our Setting groups.
-    $db->delete_query("settings","name LIKE 'steamlogin_%'");
-    $db->delete_query("settinggroups","name = 'steamlogin'");
+    $gid = $db->fetch_array($db->simple_select('settinggroups', 'gid', 'name = \'steamlogin\''));
 
-    /**
-     * Revert username length change.
-     */
-    $update_username_length = $db->update_query("settings",array('value' => '15'),"name = 'maxnamelength'");
+    if(!empty($gid))
+    {
 
-    /**
-     * Template Edits
-     * - - - - - - - - - - - - - - -
-     * Revert any template edits made during install.
-     */
-    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+        $gid = $gid['gid'];
 
-    find_replace_templatesets('header_welcomeblock_guest', '#' . preg_quote('&mdash; <a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_login"><img border="0" src="inc/plugins/steamlogin/steam_login_btn.png" alt="Login through Steam" style="vertical-align:middle"></a>') . '#i', '');
-    find_replace_templatesets('member_profile', '#' . preg_quote('{$steamlogin_profile_block}{$signature}') . '#i', '{$signature}');
-    find_replace_templatesets('footer', '#' . preg_quote('Steam Login provided by <a href="http://www.calculator.tf">www.calculator.tf</a><br>Powered by <a href="http://www.steampowered.com">Steam</a>.') . '#i', '');
+        // Delete the settings for our plugin.
+        $db->delete_query('settinggroups', 'gid = \'' . $gid . '\'');
+        $db->delete_query('settings', 'gid = \'' . $gid . '\'');
 
-    $db->delete_query("templates", "title LIKE 'steamlogin_%' AND sid='-1'");
+        rebuild_settings();
+
+        // Remove steam_id from users table.
+        $db->drop_column('users', 'steam_id');
+
+        // Delete the templates.
+        $db->delete_query('templates', 'title = \'steam_link_usercp\' OR title = \'steam_profile_link\'');
+
+        require_once MYBB_ROOT.'/inc/adminfunctions_templates.php';
+
+        // Remove link from User CP nav.
+        find_replace_templatesets(
+            'usercp_nav_misc',
+            '#' . preg_quote('<tr><td class="trow1 smalltext"><a href="usercp.php?action=steam_link" class="usercp_nav_item" style="background-image: url(inc/plugins/steamlogin/img/steam_icon.png);background-position:0;background-repeat:no-repeat;">Link to Steam Account</a></td></tr>') . '#i',
+            ''
+        );
+
+        // Remove postbit edit.
+        find_replace_templatesets(
+            'postbit_author_user',
+            '#' . preg_quote('<br />Steam ID: {steam_linked}') . '#i',
+            ''
+        );
+
+        // Remove "Steam Login" from welcome block.
+        find_replace_templatesets(
+            'header_welcomeblock_guest',
+            '#' . preg_quote('<a href="{$mybb->settings[\'bburl\']}/misc.php?action=steam_link"><img border="0" src="inc/plugins/steamlogin/img/steam_wide.png" alt="Login with Steam"></a>') . '#i',
+            ''
+        );
+
+    } // close if(!empty($gid))
 
 } // close function steamlogin_deactivate
 
 
-
-/**
- *
- * Steam Redirect - steam_redirect
- * - - - - - - - - - - - - - - -
- * @desc Redirects the browser to Steam OpenID website for login.
- * @since 1.0
- * @version 1.6
- *
- */
-function steam_redirect()
+function steam_link()
 {
 
-	global $mybb, $db;
+    global $mybb, $lang;
 
-	// Check if the user is logged in or not.
-	if($mybb->user['uid'] == 0) {
-
-		// Get the Steam API key set in settings.
-		$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
-
-		if($get_key['value'] == null) {
-
-			// The Steam API key hasn't been set, so stop the script and output error message.
-            die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
-
-		} else { // close if($get_key['value'] == null)
-
-            // Do a check for required profile fields.
-            $count_required_fields = $db->num_rows($db->simple_select("profilefields", "*", "required = '1'"));
-
-            $return_url = '/misc.php?action=steam_return';
-
-			//Set options for the OpenID library.
-		    require_once MYBB_ROOT.'inc/class_lightopenid.php';
-
-			$SteamOpenID = new LightOpenID();
-			$SteamOpenID->returnUrl = $mybb->settings['bburl'].$return_url;
-		    $SteamOpenID->__set('realm', $mybb->settings['bburl'].$return_url);
-
-		    $SteamOpenID->identity = 'http://steamcommunity.com/openid';
-
-		    // Redirect directly to Steam.
-		    redirect($SteamOpenID->authUrl(), 'You are being redirect to Steam to authenticate your account for use on our website.', 'Login via Steam');
-
-		} // close else
-
-	} // close if($mybb->user['uid'] == 0)
-
-} // close function steam_redirect
-
-
-/**
- *
- * Redirect Output - steam_output_to_misc
- * - - - - - - - - - - - - - - -
- * @desc This function is holds the actions issued by the Steam Login plugin.
- * @since 1.0
- * @version 1.6
- *
- */
-function steam_output_to_misc() {
-
-    global $mybb, $db, $session;
-        
-    // The standard action to redirect the user to Steam community.
-    if($mybb->input['action'] == 'steam_login')
+    if($mybb->input['action'] == 'steam_link')
     {
 
-		steam_redirect();
+        require_once('steamlogin/steam.php');
+        $steam = new Steam();
 
-    } // close if($mybb->input['action'] == 'steam_login')
+        // Load the plugin language file.
+        $lang->load('steamlogin');
 
+        redirect($steam->login(), $lang->steam_redirect_login);
 
-    if($mybb->input['action'] == 'steam_return')
-    {
-    	$get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
-        $check_update_username = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_username'"));
-        $check_update_avatar = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_update_avatar'"));
-        $check_avatar_size = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_avatar_size'"));
-        $check_required_field = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_required_field'"));
+    } // close if($mybb->input['action'] == 'steam_link')
 
-    	if($get_key['value'] == null) {
-
-    		die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
-
-    	} else {
-
-	    	require_once MYBB_ROOT.'inc/class_steam.php';
-	        require_once MYBB_ROOT.'inc/class_lightopenid.php';
-	    	require_once MYBB_ROOT.'inc/functions.php';
-	    	require_once MYBB_ROOT.'inc/class_session.php';
-
-	    	$steam = new steam;
-	     
-	     	$steam_open_id = new LightOpenID();   
-	        $steam_open_id->validate();
-
-	        $return_explode = explode('/', $steam_open_id->identity);
-	        $steamid = end($return_explode);
-
-	        $steam_info = $steam->get_user_info($steamid);
-
-	        // Check the status.
-	        if($steam_info['status'] == 'success')
-	        {
-
-	        	$steamid = $steam_info['steamid'];
-	        	$personaname = $steam_info['personaname'];
-	        	$profileurl = $steam_info['profileurl'];
-                $avatar = $steam_info['avatars']['medium'];
-
-                // Check the avatar size set in the database.
-                if($check_avatar_size['value'] == '0') $avatar = $steam_info['avatars']['small'];
-                if($check_avatar_size['value'] == '2') $avatar = $steam_info['avatars']['large'];
-	        	
-			    $personaname = strip_tags($personaname);//This is so people can not use tags that display.
-	        	$personaname = $db->escape_string($personaname);
-			
-		        // Perform a check to see if the user already exists in the database.
-		        $user_check = $db->num_rows($db->simple_select("users", "*", "loginname = '$steamid'"));
-
-		        if($user_check == 0) 
-		        {
-
-		        	$password = random_str(8);
-		        	$email = $steamid.'@steamcommunity.com';
-		        	$default_usergroup = 2; // On a standard MyBB installation this is the group: Registered
-
-					require_once MYBB_ROOT . "inc/datahandlers/user.php";
-					$userhandler = new UserDataHandler("insert");
-
-					$new_user_data = array(
-						"username" => $personaname,
-						"password" => $password,
-						"password2" => $password,
-						"email" => $email,
-						"email2" => $email,
-						"avatar" => $avatar,
-						"usergroup" => $default_usergroup,
-						"displaygroup" => $default_usergroup,
-						"website" => $profileurl,
-						"regip" => $session->ipaddress,
-						"longregip" => my_ip2long($session->ipaddress),
-						"loginname" => $steamid
-					);
-
-                    if($check_required_field['value'] != "" and is_numeric($check_required_field['value']))
-                    {
-
-                        // Check the field exists.
-                        $field_exists = $db->num_rows($db->simple_select("profilefields", "*", "fid = '".$check_required_field['value']."'"));
-                        if($field_exists > 0) $new_user_data['profile_fields']['fid'.$check_required_field['value']] = $steamid;
-
-                    }
-
-					$userhandler->set_data($new_user_data);
-
-					if ($userhandler->validate_user()) {
-
-						$user_info = $userhandler->insert_user();
-
-					} // close if ($userhandler->validate_user())
-
-
-			    } else { // close if($user_check == 0)
-
-                    $update = array(); // Init our update array.
-
-                    // Do our checks for both username and avatar.
-                    if($check_update_username['value'] == 1) $update['username'] = $personaname;
-                    if($check_update_avatar['value'] == 1) $update['avatar'] = $avatar;
-
-                    // Run our update query if the array isn't empty.
-                    if(!empty($update)) $db->update_query('users', $update, "loginname = '$steamid'");
-
-			    } // close else
-
-			    $user = $db->fetch_array($db->simple_select("users", "*", "loginname = '$steamid'"));
-
-			    // Login the user.
-				my_setcookie("mybbuser", $user['uid']."_".$user['loginkey'], true, true);
-				my_setcookie("sid", $session->sid, -1, true);
-
-				redirect("index.php", 'Your account has been authenticated and you have been logged in.<br/> Powered By <a href="http://www.steampowered.com" target="_blank">Steam</a>', 'Login via Steam');
-
-			} // close if($steam_info['status'] == 'success')
-
-		} // close else
-
-	} // close if($mybb->input['action'] == 'steam_login')
-
-} // close function steam_return
-
-
-/**
- *
- * User Profiles - steamify_user_profile
- * - - - - - - - - - - - - - - -
- * @desc Adds information relating to Steam to the user profile if the account is linked.
- * @since 1.5
- * @version 1.5
- *
- */
-function steamify_user_profile()
-{
-
-    global $db, $mybb, $steamid_32, $steamid_64, $steamrep_link, $steam_level, $steam_status, $steam_verified, $steamlogin_profile_block, $templates, $theme;
-
-    require_once MYBB_ROOT.'inc/class_steam.php';
-    $steam = new steam;
-
-    // Get the ID of the user being viewed.
-    $uid = $mybb->input['uid'];
-
-    // Get the possible Steam ID of the user.
-    $user_details = $db->fetch_array($db->simple_select("users", "loginname", "uid = '$uid'"));
-
-    $steam_verified = 'No';
-    $steamid_64 = 'N/A';
-    $steamid_32 = 'N/A';
-    $steamrep_link = 'N/A';
-    $steam_level = '?';
-    $steam_status = 'N/A';
-
-    // Check to see if loginname is empty, and make sure it's numeric.
-    if($user_details['loginname'] != null and is_numeric($user_details['loginname']))
+    if($mybb->input['action'] == 'steam_openid')
     {
 
-        // Get our ID variables.
-        $steamid_64 = $user_details['loginname'];
-        $steamid_32 = $steam->convert64to32($steamid_64);
+        require_once('steamlogin/openid.php');
+        $openid = new LightOpenID($mybb->settings['bburl']);
+        $openid->validate();
 
-        // Get the level on the Steam profile.
-        $steam_level = $steam->get_steam_level($steamid_64);
+        // Load the plugin language file.
+        $lang->load('steamlogin');
 
-        $steam_verified = 'Yes';
+        // Get the identity of the logged in user.
+        $identity = $openid->identity;
 
-        // Create a link for SteamRep.
-        $steamrep_link = '<a href="http://www.steamrep.com/profiles/'.$steamid_64.'" target="_blank">http://www.steamrep.com/profiles/'.$steamid_64.'</a>';
+        $identity_array = explode('/', $identity);
+        $id = end($identity_array);
 
-        // Get our steam status
-        $steam_status = '<a href="http://www.steamcommunity.com/profiles/'.$steamid_64.'" target="_blank"><img src="http://steamsignature.com/status/english/'.$steamid_64.'.png" /></a><a href="steam://friends/add/'.$steamid_64.'"><img src="http://steamsignature.com/AddFriend.png"></a>';
+        require_once('steamlogin/steam.php');
+        $steam = new Steam();
 
-        eval("\$steamlogin_profile_block = \"".$templates->get("steamlogin_profile_block")."\";");
+        // Check if this ID has already been linked to an account.
+        $check_linked = $steam->check_id($id);
+        $check_linked = $check_linked['linked'];
 
-    } // close if($user_details['loginname'] != null and is_numeric($user_details['loginname']))
-
-} // close function steamify_user_profile
-
-
-/**
- *
- * Steam Linked - steam_linked
- * - - - - - - - - - - - - - - -
- * @desc Outputs a page for a disabled feature if user is linked to Steam.
- * @since 1.6
- * @version 1.6
- *
- */
-function steam_linked()
-{
-
-    global $mybb, $index, $header, $headerinclude, $footer, $templates, $theme;
-
-    if($mybb->input['action'] == 'steam_linked')
-    {
-        eval("\$index = \"".$templates->get("steamlogin_feature_disabled")."\";");
-        output_page($index);
-    }
-
-} // close function steam_linked
-
-
-/**
- *
- * Steam Account Linked - steam_account_linked
- * - - - - - - - - - - - - - - -
- * @desc Redirects to steam_linked function.
- * @since 1.6
- * @version 1.6
- *
- */
-function steam_account_linked()
-{
-
-    global $mybb;
-
-    if($mybb->user['uid'] > 0)
-    {
-
-        if($mybb->user['loginname'] != null and is_numeric($mybb->user['loginname']))
+        if(!$check_linked)
         {
 
-            header("Location: misc.php?action=steam_linked");
+            if ($mybb->user['uid'] == 0) {
 
-        } // close if($mybb->user['loginname'] != null and is_numeric($mybb->user['loginname']))
+                // There is no user with this Steam ID, redirect them to the register screen.
+                my_setcookie('steam_id', $id);
 
-    } // close if($mybb->user['uid'] > 0)
+                // Redirect to the register screen.
+                redirect(sprintf('%s/member.php?action=register', $mybb->settings['bburl']), $lang->steam_register_message);
 
-} // close function steam_account_linked
+            } else { // close if ($mybb->user['uid'] == 0)
 
+                global $db;
 
-function fix_steam_username()
-{
+                // Update the logged in user with the Steam ID.
+                $db->update_query('users', array('steam_id' => $id), 'uid = \'' . $mybb->user['uid'] . '\'');
 
-    global $db, $mybb;
-
-    if($mybb->user['uid'] > 0 && $mybb->usergroup['cancp'])
-    {
-
-        if($mybb->input['action'] == 'fix_steam_username')
-        {
-            $get_key = $db->fetch_array($db->simple_select("settings", "name, value", "name = 'steamlogin_api_key'"));
-
-            if($get_key['value'] != null)
-            {
-
-                require_once MYBB_ROOT.'inc/class_steam.php';
-
-                // Create a new instance of the Steam class.
-                $steam = new steam;
-
-                // Grab a list of all users.
-                $users_result = $db->simple_select("users", "uid, loginname", "");
-
-                while($user = $db->fetch_array($users_result))
-                {
-
-                    $uid = $user['uid'];
-                    $loginname = $user['loginname'];
-
-                    if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
-                    {
-
-                        // Get the details of the user from their Steam ID.
-                        $user_details = $steam->get_user_info($loginname);
-
-                        // Get the persona from the Steam service.
-                        $personaname = $user_details['personaname'];
-
-                        // Create an array of data to update.
-                        $update = array();
-                        $update['loginname'] = $personaname;
-
-                        // Run the update query.
-                        $db->update_query('users', $update, "uid = '$uid'");
-
-                    } // close if(is_numeric($uid) && (is_numeric($loginname) && strlen($loginname) == 17))
-
-                } // close while($user = $db->fetch_array($users_result))
-
-                die("<p>Any user(s) that were missing a Steam name will have now been updated.</p>");
-
-            } else { // close if(!is_null($get_key))
-
-                die("<strong>Not Configured</strong> The Steam Login plugin hasn't been configured correctly. Please ensure an API key is set in the Configuration settings.");
+                // Redirect back to Steam Link UserCP page.
+                redirect($mybb->settings['bburl'] . '/usercp.php?action=steam_link', $lang->steam_link_success);
 
             } // close else
 
-        }
+        } else {
 
-    } else { // close if($mybb->user['uid'] > 0)
+            if($mybb->user['uid'] == 0)
+            {
 
-        die("You shouldn't be here...");
+                global $cache, $session;
 
-    } // close else
+                // Set login cookies for the user.
+                my_setcookie('mybbuser', sprintf('%s_%s', $check_linked['uid'], $check_linked['loginkey']), true, true);
+                my_setcookie('sid', $session->sid, -1, true);
 
-} // close function
+                // Delete the cache.
+                $cache->update(sprintf('steam_data_%s', $id), '');
 
-?>
+                // Then recreate it.
+                $steam->get_steam_information($id);
+
+                // Redirect back to the forum index.
+                redirect($mybb->settings['bburl'], $lang->steam_login_successful);
+
+            } else {
+
+                redirect($mybb->settings['bburl'], $lang->steam_link_taken);
+
+            }
+
+        } // close else
+
+    } // close if($mybb->input['action'] == 'steam_openid')
+
+} // close function steam_link
+
+
+function complete_steam_link_register()
+{
+
+    global $db, $mybb, $lang;
+
+    $username = $mybb->input['username'];
+    $id = $mybb->cookies['steam_id'];
+
+    $uid_query = $db->fetch_array($db->simple_select('users', 'uid', 'username = \'' . $username . '\''));
+
+    if(!empty($uid_query))
+    {
+        $uid = $uid_query['uid'];
+
+        // Update the user record with the Steam ID.
+        $db->update_query('users', array('steam_id' => $id), 'uid = \'' . $uid . '\'');
+
+        // Load the plugin language file.
+        $lang->load('steamlogin');
+
+        redirect($mybb->settings['bburl'], $lang->steam_register_complete);
+
+        // Unlink the session variable.
+        my_unsetcookie('steam_id');
+
+    } // close if(!empty($uid_query))
+
+} // close function complete_steam_link_register
+
+
+function steam_link_page()
+{
+
+    global $mybb, $templates, $lang, $link_status, $header, $headerinclude, $footer, $usercpnav, $theme;
+
+    if($mybb->user['uid'] != 0 && $mybb->input['action'] == 'steam_link')
+    {
+
+        // Include the Steam library.
+        require_once('steamlogin/steam.php');
+        $steam = new Steam();
+
+        // First thing to do is check if they are linked or not.
+        $user_linked = $steam->check_user_linked($mybb->user['uid']);
+
+        // Load the plugin language file.
+        $lang->load('steamlogin');
+
+        if($user_linked)
+        {
+
+            global $steam_profile_link;
+
+            // If the user is linked, get their information from Steam API.
+            $steam_info = $steam->get_steam_information($user_linked);
+
+            eval("\$steam_profile_link = \"".$templates->get("steam_profile_link")."\";");
+            $link_status = sprintf('<p>' . $lang->steam_linked_message . ' %s</p>', $steam_profile_link);
+
+        } else { // close if($user_linked)
+
+            $link_status = '<p><a href="misc.php?action=steam_link"><img border="0" src="inc/plugins/steamlogin/img/steam_large.png" alt="Login with Steam"></a></p>';
+
+        } // close else
+
+        add_breadcrumb($lang->nav_usercp, "usercp.php");
+        add_breadcrumb($lang->ucp_steam_link);
+
+        eval("\$usercp_steam_link = \"".$templates->get("steam_link_usercp")."\";");
+        output_page($usercp_steam_link);
+
+    } // close if($mybb->input['action'] == 'steam_link')
+
+} // close function steam_link_page
+
+
+function add_to_postbit(&$post)
+{
+
+    $linked = 'N/A';
+    if($post['steam_id'] != 0)
+    {
+        require_once('steamlogin/steam.php');
+        $steam = new Steam();
+
+        global $templates, $steam_info, $steam_profile_link;
+        $steam_info = $steam->get_steam_information($post['steam_id']);
+
+        eval("\$steam_profile_link = \"".$templates->get("steam_profile_link")."\";");
+        $linked = $steam_profile_link;
+    }
+
+    $post['user_details'] = str_replace('{steam_linked}', $linked, $post['user_details']);
+
+} // close function add_to_postbit
