@@ -9,3 +9,6 @@ Please note that this version is still in development and is recommended **not t
 You can help out by downloading this version and testing it out on a development installation. We recommend running a clean installation as an upgrade has not yet been coded.
 
 The plugin supports both; MyBB 1.6 & MyBB 1.8
+
+For more information on Version 2, please refer to the wiki post:
+https://github.com/stewartiee/Steam-OpenID--MyBB-/wiki/Version-2-Info
