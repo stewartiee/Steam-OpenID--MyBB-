@@ -1,5 +1,8 @@
 Steam-OpenID--MyBB-
 ===================
+
+**Please Note!** - This plugin will only work for MyBB 1.6
+
 This plugin will replace the base functionality of registering and logging in by default. The code is pretty self explanitory so you can change this to work alongside etc.
 
 To install copy all files to your server and enable both the 'Display Usernames' and 'Steam Login' plugins.
