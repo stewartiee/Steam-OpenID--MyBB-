@@ -74,7 +74,7 @@ function steamlogin_activate()
     $db->add_column('users', 'steam_id', 'BIGINT(17) NOT NULL DEFAULT 0');
 
     // The template to show the user that's linked.
-    $steam_profile_link_template = '<img border="0" src="{$steam_info[\'avatar\']}" alt="{$steam_info[\'personaname\']}\'s Avatar" style="width:16px;height:16px;vertical-align:middle"> <a href="http://www.steamcommunity.com/profiles/{$post[\'steam_id\']}" target="_blank" title="Click this link to view their Steam Profile">{$steam_info[\'personaname\']}</a>';
+    $steam_profile_link_template = '<img border="0" src="{$steam_info[\'avatar\']}" alt="{$steam_info[\'personaname\']}\'s Avatar" style="width:16px;height:16px;vertical-align:middle"> <a href="http://www.steamcommunity.com/profiles/{$steam_info[\'steam_id\']}" target="_blank" title="Click this link to view their Steam Profile">{$steam_info[\'personaname\']}</a>';
 
     $steam_profile_link_insert_array = array(
         'title' => 'steam_profile_link',
