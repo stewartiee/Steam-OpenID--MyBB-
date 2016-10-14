@@ -3,10 +3,7 @@ A proof of concept plugin for MyBB. This plugin allows users to login and post u
 
 Version 2
 - - -
-This version is a new focus for the project, mainly building around the core login/register of the MyBB software.
-Please note that this version is still in development and is recommended **not to be run on a live installation**.
-
-You can help out by downloading this version and testing it out on a development installation. We recommend running a clean installation as an upgrade has not yet been coded.
+This version is a new focus for the project, mainly building around the core login/register of the MyBB software. A user will be able to link their Steam account to an existing forum account, or create a new account and link their Steam account to it. Once linked, they can login easily through Steam. This version does not support their Steam Profile name as the username, and does not update the avatar for the user. It will simply add a link to their Steam Profile on any posts they make.
 
 The plugin supports both; MyBB 1.6 & MyBB 1.8
 
